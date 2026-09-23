@@ -187,13 +187,14 @@ export function createHouse() {
   box('base', 0, 0.03, 0, 12, 0.25, 7.5);
   box('base', 7.5, 0.02, 0.6, 3.8, 0.22, 8.3);
   function floor(x, z, w, d, y) {
-    for (let xx = x - w / 2 + 0.24; xx < x + w / 2; xx += 0.49) {
-      box('webstock', xx, y, z, 0.06, 0.25, d);
-      box('framing', xx, y + 0.15, z, 0.13, 0.055, d);
-      box('framing', xx, y - 0.15, z, 0.13, 0.055, d);
+    // Joists run between the rims; end rims butt between the side rims so corners don't overlap.
+    for (let xx = x - w / 2 + 0.24; xx + 0.065 <= x + w / 2 - 0.0375; xx += 0.49) {
+      box('webstock', xx, y, z, 0.06, 0.25, d - 0.075);
+      box('framing', xx, y + 0.15, z, 0.13, 0.055, d - 0.075);
+      box('framing', xx, y - 0.15, z, 0.13, 0.055, d - 0.075);
     }
-    for (const zz of [z - d / 2, z + d / 2]) box('rim', x, y, zz, w, 0.32, 0.075);
-    for (const xx of [x - w / 2, x + w / 2]) box('rim', xx, y, z, 0.075, 0.32, d);
+    for (const zz of [z - d / 2, z + d / 2]) box('rim', x, y, zz, w + 0.075, 0.32, 0.075);
+    for (const xx of [x - w / 2, x + w / 2]) box('rim', xx, y, z, 0.075, 0.32, d - 0.075);
     for (let xx = x - w / 2; xx < x + w / 2 - 0.1; xx += 1.2)
       for (let zz = z - d / 2; zz < z + d / 2 - 0.1; zz += 2.4) {
         const pw = Math.min(1.2, x + w / 2 - xx),
@@ -206,18 +207,51 @@ export function createHouse() {
   function wall(x, z, length, y, height, axis = 'x', openings = [], cut = false) {
     const horizontal = (along, yy, w, h, id = 'framing', dep = 0.14) =>
       axis === 'x' ? box(id, x + along, yy, z, w, h, dep) : box(id, x, yy, z + along, dep, h, w);
-    for (const yy of [y, y + height - 0.08, y + height]) horizontal(0, yy, length, 0.085, 'plates');
-    for (let u = -length / 2 + 0.05; u < length / 2; u += 0.4) {
-      const op = openings.find((o) => u > o[0] && u < o[1]);
-      if (op) {
-        if (op[2] > 0.12) horizontal(u, y + op[2] / 2, 0.075, op[2]);
-        horizontal(u, y + (op[3] + height) / 2, 0.075, height - op[3]);
-      } else horizontal(u, y + height / 2, 0.075, height);
+    // Framing butts rather than overlaps. Walls along z sit between walls along x, so x-wall
+    // framing runs half a stud depth past each end and z-wall framing stops half a depth short.
+    const SW = 0.075, // stud width
+      PT = 0.085, // plate thickness
+      end = length / 2 + (axis === 'x' ? 0.07 : -0.07),
+      bottom = y + PT / 2, // top of the bottom plate
+      top = y + height - PT * 1.5; // underside of the double top plate
+    const stud = (u, from, to) => to - from > 0.02 && horizontal(u, (from + to) / 2, SW, to - from);
+    // Bottom plate stops at door openings; double top plate runs through.
+    let from = -end;
+    for (const o of openings.filter((o) => o[2] <= 0.12).sort((a, b) => a[0] - b[0])) {
+      horizontal((from + o[0]) / 2, y, o[0] - from, PT, 'plates');
+      from = o[1];
     }
-    for (const o of openings) {
-      horizontal((o[0] + o[1]) / 2, y + o[3], o[1] - o[0] + 0.24, 0.24, 'lvl');
-      if (o[2] > 0.12) horizontal((o[0] + o[1]) / 2, y + o[2], o[1] - o[0] + 0.15, 0.09);
-      for (const u of [o[0], o[1]]) horizontal(u, y + o[3] / 2, 0.12, o[3]);
+    horizontal((from + end) / 2, y, end - from, PT, 'plates');
+    for (const yy of [y + height - PT, y + height]) horizontal(0, yy, end * 2, PT, 'plates');
+    // Common studs on a 0.4 grid plus an end stud each side; skip any that clash with a
+    // king/jack pair, and keep only cripples that fit fully inside an opening.
+    const clashes = (u) =>
+      openings.some((o) => u + SW / 2 > o[0] - 2 * SW && u - SW / 2 < o[1] + 2 * SW);
+    const studs = [];
+    const add = (u) => {
+      if (u - SW / 2 < -end - 1e-6 || u + SW / 2 > end + 1e-6) return;
+      if (studs.every((v) => Math.abs(v - u) >= SW - 1e-6)) studs.push(u);
+    };
+    add(-end + SW / 2);
+    add(end - SW / 2);
+    for (let u = axis === 'x' ? -length / 2 + 0.05 : -end + SW / 2; u < end; u += 0.4) add(u);
+    for (const u of studs) {
+      const op = openings.find((o) => u - SW / 2 >= o[0] && u + SW / 2 <= o[1]);
+      if (op) {
+        if (op[2] > 0.12) stud(u, bottom, y + op[2] - 0.09);
+        stud(u, y + op[3] + 0.24, top);
+      } else if (!clashes(u)) stud(u, bottom, top);
+    }
+    for (const [u0, u1, sill, head] of openings) {
+      horizontal((u0 + u1) / 2, y + head + 0.12, u1 - u0 + 2 * SW, 0.24, 'lvl'); // header on jacks
+      if (sill > 0.12) horizontal((u0 + u1) / 2, y + sill - 0.045, u1 - u0, 0.09); // rough sill
+      for (const [jack, king] of [
+        [u0 - SW / 2, u0 - SW * 1.5],
+        [u1 + SW / 2, u1 + SW * 1.5],
+      ]) {
+        stud(jack, bottom, y + head);
+        stud(king, bottom, top);
+      }
     }
     // Sheet strips subdivided at opening edges preserve real holes.
     const breaks = [-length / 2, length / 2, ...openings.flatMap((o) => [o[0], o[1]])];
@@ -356,7 +390,7 @@ export function createHouse() {
   roof(0, -0.2, 4.4, 5.8, 6.31, 1.9, true);
   roof(3.9, 0, 3.8, 7, 3.42, 2.15, true);
   // Garage door and limited finished siding retain the reference's cutaway identity.
-  box('trim', -3.7, 1.72, 3.62, 3.35, 2.1, 0.07);
+  box('trim', -3.7, 1.755, 3.62, 3.35, 2.17, 0.07); // fills the opening up to the header
   for (let row = 0; row < 4; row++)
     for (let col = 0; col < 6; col++)
       box(
@@ -387,11 +421,11 @@ export function createHouse() {
     box('deck', 7.65, 0.83, z, 3.5, 0.08, 0.09);
     for (let x = 6.1; x < 9.3; x += 0.22) box('deck', x, 1.28, z, 0.055, 0.86, 0.055);
   }
-  for (const z of [-3.3, -1.25, 0.8, 2.85, 4.93]) box('deck', 9.32, 1.15, z, 0.13, 1.25, 0.13);
-  for (let z = -3.2; z < 4.9; z += 0.22) box('deck', 9.32, 1.27, z, 0.055, 0.86, 0.055);
-  box('deck', 9.32, 1.77, 0.8, 0.16, 0.1, 8.35);
-  box('deck', 9.32, 0.84, 0.8, 0.09, 0.08, 8.35);
-  box('deck', 9.32, 0.34, 0.8, 0.12, 0.33, 8.4);
+  for (const z of [-1.25, 0.8, 2.85]) box('deck', 9.32, 1.15, z, 0.13, 1.25, 0.13);
+  for (let z = -3.2; z < 4.9; z += 0.22) box('deck', 9.32, 1.28, z, 0.055, 0.86, 0.055);
+  box('deck', 9.32, 1.77, 0.815, 0.16, 0.1, 8.07);
+  box('deck', 9.32, 0.83, 0.815, 0.09, 0.08, 8.14);
+  box('deck', 9.32, 0.34, 0.815, 0.12, 0.33, 8.11);
   // Interior cabinet carcasses and MDF fronts; structural products stay independent.
   for (let x = 2.6; x < 5.1; x += 0.65) {
     box('particle', x, 1.15, -2.95, 0.6, 0.94, 0.6);
