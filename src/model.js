@@ -193,8 +193,8 @@ export function createHouse() {
       box('framing', xx, y + 0.15, z, 0.13, 0.055, d - 0.075);
       box('framing', xx, y - 0.15, z, 0.13, 0.055, d - 0.075);
     }
-    for (const zz of [z - d / 2, z + d / 2]) box('rim', x, y, zz, w + 0.075, 0.32, 0.075);
-    for (const xx of [x - w / 2, x + w / 2]) box('rim', xx, y, z, 0.075, 0.32, d - 0.075);
+    for (const zz of [z - d / 2, z + d / 2]) box('rim', x, y, zz, w + 0.075, 0.355, 0.075);
+    for (const xx of [x - w / 2, x + w / 2]) box('rim', xx, y, z, 0.075, 0.355, d - 0.075);
     for (let xx = x - w / 2; xx < x + w / 2 - 0.1; xx += 1.2)
       for (let zz = z - d / 2; zz < z + d / 2 - 0.1; zz += 2.4) {
         const pw = Math.min(1.2, x + w / 2 - xx),
@@ -203,7 +203,11 @@ export function createHouse() {
       }
   }
   floor(0, 0, 11.6, 7, 0.42);
-  floor(0.1, -0.2, 4.4, 5.8, 3.37);
+  // The 2nd storey sits on the ground walls: its joists and rim bear on the double top plate
+  // (wall base 0.66 + 2.7 + half a plate), and its walls stand on its subfloor.
+  const upperFloor = 0.66 + 2.7 + 0.0425 + 0.1775,
+    upperWall = upperFloor + 0.2325 + 0.0425;
+  floor(0.1, -0.2, 4.4, 5.8, upperFloor);
   function wall(x, z, length, y, height, axis = 'x', openings = [], cut = false) {
     const horizontal = (along, yy, w, h, id = 'framing', dep = 0.14) =>
       axis === 'x' ? box(id, x + along, yy, z, w, h, dep) : box(id, x, yy, z + along, dep, h, w);
@@ -327,7 +331,7 @@ export function createHouse() {
     0,
     2.7,
     4.4,
-    3.61,
+    upperWall,
     2.65,
     'x',
     [
@@ -336,9 +340,9 @@ export function createHouse() {
     ],
     true,
   );
-  wall(0, -3.1, 4.4, 3.61, 2.65, 'x', [[-0.65, 0.65, 0.8, 1.95]]);
-  wall(-2.2, -0.2, 5.8, 3.61, 2.65, 'z');
-  wall(2.2, -0.2, 5.8, 3.61, 2.65, 'z', [[-1.3, 0.1, 0.8, 1.95]], true);
+  wall(0, -3.1, 4.4, upperWall, 2.65, 'x', [[-0.65, 0.65, 0.8, 1.95]]);
+  wall(-2.2, -0.2, 5.8, upperWall, 2.65, 'z');
+  wall(2.2, -0.2, 5.8, upperWall, 2.65, 'z', [[-1.3, 0.1, 0.8, 1.95]], true);
   function roof(cx, cz, w, d, y, rise, cut = false) {
     const left = cx - w / 2 - 0.22,
       right = cx + w / 2 + 0.22;
@@ -391,7 +395,7 @@ export function createHouse() {
     }
   }
   roof(-3.8, 0, 4, 7, 3.42, 1.85);
-  roof(0, -0.2, 4.4, 5.8, 6.31, 1.9, true);
+  roof(0, -0.2, 4.4, 5.8, upperWall + 2.7, 1.9, true);
   roof(3.9, 0, 3.8, 7, 3.42, 2.15, true);
   // Garage door and limited finished siding retain the reference's cutaway identity.
   box('trim', -3.7, 1.755, 3.62, 3.35, 2.17, 0.07); // fills the opening up to the header
@@ -406,7 +410,8 @@ export function createHouse() {
         0.39,
         0.035,
       );
-  for (let yy = 3.65; yy < 6.19; yy += 0.16) box('context', -2.356, yy, -0.2, 0.065, 0.143, 5.8);
+  for (let yy = upperWall + 0.04; yy < upperWall + 2.58; yy += 0.16)
+    box('context', -2.356, yy, -0.2, 0.065, 0.143, 5.8);
   for (let yy = 0.8; yy < 3.35; yy += 0.16) box('context', -5.945, yy, 0, 0.04, 0.145, 7);
   // Front porch with shed roof and separate boards.
   for (let x = -1.95; x <= 1.95; x += 0.22) box('deck', x, 0.6, 3.9, 0.205, 0.11, 2.2);
