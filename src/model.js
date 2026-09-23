@@ -253,9 +253,13 @@ export function createHouse() {
         stud(king, bottom, top);
       }
     }
-    // Sheet strips subdivided at opening edges preserve real holes.
-    const breaks = [-length / 2, length / 2, ...openings.flatMap((o) => [o[0], o[1]])];
-    for (let a = -length / 2; a < length / 2; a += 1.2) breaks.push(a);
+    // Sheet strips subdivided at opening edges preserve real holes. Sheathing sits on the
+    // outside face (away from the house centre); walls along x run it past the corners and walls
+    // along z butt into it, matching the framing.
+    const out = Math.sign(axis === 'x' ? z : x) || 1,
+      sEnd = length / 2 + (axis === 'x' ? 0.1225 : 0.0775);
+    const breaks = [-sEnd, sEnd, ...openings.flatMap((o) => [o[0], o[1]])];
+    for (let a = -length / 2 + 1.2; a < length / 2; a += 1.2) breaks.push(a);
     breaks.sort((a, b) => a - b);
     for (let i = 0; i < breaks.length - 1; i++) {
       const a = breaks[i],
@@ -278,8 +282,8 @@ export function createHouse() {
           'walls',
           0.045,
         );
-        if (axis === 'x') mesh.position.z += 0.1;
-        else mesh.position.x += 0.1;
+        if (axis === 'x') mesh.position.z += 0.1 * out;
+        else mesh.position.x += 0.1 * out;
         mesh.userData.basePosition = mesh.position.toArray();
         mesh.userData.cut = cut;
       }
@@ -402,8 +406,8 @@ export function createHouse() {
         0.39,
         0.035,
       );
-  for (let yy = 3.65; yy < 6.19; yy += 0.16) box('context', -2.29, yy, -0.2, 0.065, 0.143, 5.8);
-  for (let yy = 0.8; yy < 3.35; yy += 0.16) box('context', -5.92, yy, 0, 0.04, 0.145, 7);
+  for (let yy = 3.65; yy < 6.19; yy += 0.16) box('context', -2.356, yy, -0.2, 0.065, 0.143, 5.8);
+  for (let yy = 0.8; yy < 3.35; yy += 0.16) box('context', -5.945, yy, 0, 0.04, 0.145, 7);
   // Front porch with shed roof and separate boards.
   for (let x = -1.95; x <= 1.95; x += 0.22) box('deck', x, 0.6, 3.9, 0.205, 0.11, 2.2);
   for (const x of [-2, 0, 2]) box('trim', x, 1.9, 4.9, 0.15, 2.55, 0.15);
