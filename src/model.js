@@ -200,7 +200,7 @@ export function createHouse() {
       roughness: 0.84,
     });
   mats.siding = new THREE.MeshStandardMaterial({
-    color: '#7a8f92',
+    color: '#7c8892',
     map: lapTexture(),
     roughness: 0.85,
   });
