@@ -207,8 +207,8 @@ function partFraction(mesh, i, t) {
   const offset = (i % 17) * 0.001;
   return THREE.MathUtils.clamp((t - stage - offset) / Math.min(0.045, 1 - stage - offset), 0, 1);
 }
-// Exterior finishes (not products) step aside in explode view and while a material is selected,
-// so the materials stay visible.
+// Exterior finishes (not West Fraser products) step aside in cutaway (wood only), explode view
+// and while a material is selected, so only the wood shows. Cutaway off is the finished house.
 const FINISHES = ['siding', 'shingle', 'trim', 'glass'];
 function updateParts(dt) {
   explodeValue = THREE.MathUtils.damp(explodeValue, exploded ? 1 : 0, reduced ? 100 : 5, dt);
@@ -224,11 +224,13 @@ function updateParts(dt) {
       f = partFraction(mesh, i, progress),
       smooth = 1 - Math.pow(1 - f, 3);
     const picked = selection.has(data.product);
-    const cutHide = cutaway && data.cut && !picked;
-    mesh.visible = f > 0 && !cutHide;
+    mesh.visible = f > 0;
     // A selection shows only the selected products (on the foundation).
     if (selection.size && !picked && data.product !== 'base') mesh.visible = false;
-    if (FINISHES.includes(data.product) && (selection.size || exploded || explodeValue > 0.01))
+    if (
+      FINISHES.includes(data.product) &&
+      (cutaway || selection.size || exploded || explodeValue > 0.01)
+    )
       mesh.visible = false;
     const b = data.basePosition;
     mesh.position.set(b[0], b[1] + (1 - smooth) * (3 + (i % 5) * 0.35), b[2]);
