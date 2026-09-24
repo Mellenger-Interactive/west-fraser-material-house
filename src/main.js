@@ -15,6 +15,9 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.4;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(35, 1, 0.1, 100);
+// Fraction of the canvas height the house sits below centre (less on phones, where the view
+// buttons sit under it).
+const VIEW_DROP = { desktop: 0.1, phone: 0.04 };
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
 controls.minDistance = 13;
@@ -185,6 +188,15 @@ function resize() {
   renderer.setSize(width, height, false);
   camera.aspect = width / height;
   camera.fov = width < 550 ? 46 : 35;
+  // Lens shift: draw the house lower in the frame without moving the orbit pivot.
+  camera.setViewOffset(
+    width,
+    height,
+    0,
+    -Math.round(height * VIEW_DROP[width < 550 ? 'phone' : 'desktop']),
+    width,
+    height,
+  );
   camera.updateProjectionMatrix();
 }
 new ResizeObserver(resize).observe(canvas);
