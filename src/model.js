@@ -343,49 +343,77 @@ export function createHouse() {
   wall(0, -3.1, 4.4, upperWall, 2.65, 'x', [[-0.65, 0.65, 0.8, 1.95]]);
   wall(-2.2, -0.2, 5.8, upperWall, 2.65, 'z');
   wall(2.2, -0.2, 5.8, upperWall, 2.65, 'z', [[-1.3, 0.1, 0.8, 1.95]], true);
-  function roof(cx, cz, w, d, y, rise, cut = false) {
-    const left = cx - w / 2 - 0.22,
-      right = cx + w / 2 + 0.22;
+  // clip = { side, x, z: [zMin, zMax] }: inside that z-range the roof's `side` slope stops at x
+  // (an upper storey's wall face), with part trusses; outside it the slope runs to its eave.
+  function roof(cx, cz, w, d, y, rise, cut = false, clip = null) {
+    const H = w / 2 + 0.22, // ridge to eave, horizontally
+      left = cx - H,
+      right = cx + H;
+    const fc = clip ? Math.abs(clip.x - cx) / H : 1, // clip line as a fraction ridge -> eave
+      clipped = (z0, z1) => clip && z1 > clip.z[0] && z0 < clip.z[1];
     for (let z = cz - d / 2 - 0.2; z <= cz + d / 2 + 0.25; z += 0.54) {
-      beam('trusses', [left, y, z], [cx, y + rise, z], 0.1, 0.14);
-      beam('trusses', [cx, y + rise, z], [right, y, z], 0.1, 0.14);
-      beam('trusses', [left, y, z], [right, y, z], 0.1, 0.14);
-      beam('trusses', [cx, y, z], [cx, y + rise, z], 0.075, 0.1);
-      beam('trusses', [cx - w * 0.28, y + rise * 0.43, z], [cx, y, z], 0.075, 0.1);
-      beam('trusses', [cx + w * 0.28, y + rise * 0.43, z], [cx, y, z], 0.075, 0.1);
+      const s = clipped(z - 0.07, z + 0.07) ? clip.side : 0,
+        apex = [cx, y + rise, z],
+        stop = [clip?.x, y + rise * (1 - fc), z];
+      // Part truss on the clipped side: its top chord and the bottom chord end at the wall face.
+      beam('trusses', s === -1 ? stop : [left, y, z], apex, 0.1, 0.14);
+      beam('trusses', apex, s === 1 ? stop : [right, y, z], 0.1, 0.14);
+      beam(
+        'trusses',
+        s === -1 ? [clip.x, y, z] : [left, y, z],
+        s === 1 ? [clip.x, y, z] : [right, y, z],
+        0.1,
+        0.14,
+      );
+      beam('trusses', [cx, y, z], apex, 0.075, 0.1);
+      for (const side of [-1, 1])
+        if (side !== s || w * 0.28 < fc * H - 0.05)
+          beam('trusses', [cx + side * w * 0.28, y + rise * 0.43, z], [cx, y, z], 0.075, 0.1);
     }
     for (const side of [-1, 1]) {
-      const slopeW = Math.sqrt((w / 2 + 0.22) ** 2 + rise ** 2),
-        angle = Math.atan2(rise, w / 2 + 0.22) * side;
-      for (let z = cz - d / 2 - 0.25; z < cz + d / 2 + 0.24; z += 1.2) {
-        const pd = Math.min(1.2, cz + d / 2 + 0.25 - z);
+      const slopeW = Math.sqrt(H ** 2 + rise ** 2),
+        angle = Math.atan2(rise, H) * side,
+        onClip = clip?.side === side;
+      // Panel or strip spanning fractions a..b (ridge -> eave) of this slope.
+      const piece = (id, a, b, lift, thick, z0, z1, gapW, gapD, cutPiece) =>
+        box(
+          id,
+          cx + side * H * ((a + b) / 2),
+          y + rise * (1 - (a + b) / 2) + lift,
+          (z0 + z1) / 2,
+          slopeW * (b - a) - gapW,
+          thick,
+          z1 - z0 - gapD,
+          { rot: [0, 0, -angle], cut: cutPiece },
+        );
+      const zs = [];
+      for (let z = cz - d / 2 - 0.25; z < cz + d / 2 + 0.24; z += 1.2) zs.push(z);
+      zs.push(cz + d / 2 + 0.25);
+      if (onClip) for (const zc of clip.z) if (zc > zs[0] && zc < zs.at(-1)) zs.push(zc);
+      zs.sort((a, b) => a - b);
+      for (let i = 0; i < zs.length - 1; i++) {
+        const [z0, z1] = [zs[i], zs[i + 1]];
+        if (z1 - z0 < 0.01) continue;
         for (let row = 0; row < 2; row++) {
-          const frac = (row + 0.5) / 2;
-          box(
-            'roof',
-            cx + side * (w / 2 + 0.22) * frac,
-            y + rise * (1 - frac) + 0.05,
-            z + pd / 2,
-            slopeW / 2 - 0.018,
-            0.055,
-            pd - 0.018,
-            { rot: [0, 0, -angle], cut: cut && side === 1 },
-          );
+          const b = onClip && clipped(z0, z1) ? Math.min((row + 1) / 2, fc) : (row + 1) / 2;
+          if (b - row / 2 > 0.01)
+            piece('roof', row / 2, b, 0.05, 0.055, z0, z1, 0.018, 0.018, cut && side === 1);
         }
       }
       if (!cut || side === -1) {
+        const zA = cz - d / 2 - 0.26,
+          zB = cz + d / 2 + 0.26;
         for (let j = 0; j < 12; j++) {
-          const frac = (j + 0.5) / 12;
-          box(
-            'shingle',
-            cx + side * (w / 2 + 0.22) * frac,
-            y + rise * (1 - frac) + 0.095,
-            cz,
-            slopeW / 12 - 0.008,
-            0.035,
-            d + 0.52,
-            { rot: [0, 0, -angle], cut: cut },
-          );
+          const a = j / 12,
+            b = (j + 1) / 12;
+          if (!onClip || b <= fc + 1e-6) {
+            piece('shingle', a, b, 0.095, 0.035, zA, zB, 0.008, 0, cut);
+            continue;
+          }
+          // Beyond the clip line the strip only exists in front of and behind the upper storey.
+          if (clip.z[0] > zA) piece('shingle', a, b, 0.095, 0.035, zA, clip.z[0], 0.008, 0, cut);
+          if (clip.z[1] < zB) piece('shingle', a, b, 0.095, 0.035, clip.z[1], zB, 0.008, 0, cut);
+          if (a < fc) piece('shingle', a, fc, 0.095, 0.035, clip.z[0], clip.z[1], 0.008, 0, cut);
         }
       }
     }
@@ -394,9 +422,12 @@ export function createHouse() {
       beam('trim', [cx, y + rise + 0.03, z], [right, y + 0.03, z], 0.14, 0.16, { cut });
     }
   }
-  roof(-3.8, 0, 4, 7, 3.42, 1.85);
+  // The lower roofs stop at the 2nd storey's outer wall faces (the siding strips on the left)
+  // where it sits over them, and run full to their inner eaves in front of it.
+  const upperZ = [-3.1 - 0.1225, 2.7 + 0.1225];
+  roof(-3.8, 0, 4, 7, 3.42, 1.85, false, { side: 1, x: -2.39, z: upperZ });
   roof(0, -0.2, 4.4, 5.8, upperWall + 2.7, 1.9, true);
-  roof(3.9, 0, 3.8, 7, 3.42, 2.15, true);
+  roof(3.9, 0, 3.8, 7, 3.42, 2.15, true, { side: -1, x: 2.3225, z: upperZ });
   // Garage door and limited finished siding retain the reference's cutaway identity.
   box('trim', -3.7, 1.755, 3.62, 3.35, 2.17, 0.07); // fills the opening up to the header
   for (let row = 0; row < 4; row++)
