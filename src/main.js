@@ -3,7 +3,14 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { createHouse, products } from './model.js';
-import { BUILD_SECONDS, CLIP_SECONDS, STAGES, stageLabel } from './timeline.js';
+import {
+  BUILD_SECONDS,
+  CLIP_SECONDS,
+  PART_RAMP,
+  PART_STAGGER,
+  STAGES,
+  stageLabel,
+} from './timeline.js';
 const $ = (s) => document.querySelector(s),
   canvas = $('#canvas');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
@@ -204,8 +211,12 @@ resize();
 function partFraction(mesh, i, t) {
   if (mesh.userData.product === 'base') return 1;
   const stage = mesh.userData.stage;
-  const offset = (i % 17) * 0.001;
-  return THREE.MathUtils.clamp((t - stage - offset) / Math.min(0.045, 1 - stage - offset), 0, 1);
+  const offset = (i % 17) * PART_STAGGER;
+  return THREE.MathUtils.clamp(
+    (t - stage - offset) / Math.min(PART_RAMP, 1 - stage - offset),
+    0,
+    1,
+  );
 }
 // Exterior finishes (not West Fraser products) step aside in cutaway (wood only), explode view
 // and while a material is selected, so only the wood shows. Cutaway off is the finished house.
@@ -280,8 +291,10 @@ async function exportModel() {
     m.quaternion.fromArray(part.userData.baseQuaternion);
     out.add(m);
     if (part.userData.product === 'base') continue;
-    const start = (part.userData.stage + (i % 17) * 0.001) * BUILD_SECONDS,
-      end = start + 0.99;
+    // Same timing as partFraction(), in seconds.
+    const from = part.userData.stage + (i % 17) * PART_STAGGER,
+      start = from * BUILD_SECONDS,
+      end = start + Math.min(PART_RAMP, 1 - from) * BUILD_SECONDS;
     const pos = m.position.clone(),
       scale = m.scale.clone();
     tracks.push(

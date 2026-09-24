@@ -2,10 +2,18 @@
 // Product `stage` fractions live in model.js; keep them inside the matching bands below.
 
 /** Seconds for the in-browser build animation, 0 → 100% (`tick()`). */
-export const BUILD_SECONDS = 22;
+export const BUILD_SECONDS = 10;
 
 /** Length of the GLB `Build_From_Materials` clip: the build plus a hold at the end (`exportModel()`). */
-export const CLIP_SECONDS = 24;
+export const CLIP_SECONDS = 12;
+
+/**
+ * Each part drops in over PART_RAMP of the timeline, starting at its product's `stage` plus
+ * (index % 17) × PART_STAGGER. A product's parts span about 0.13 of the timeline, longer than
+ * the 0.06–0.12 gaps between product stages, so the next product starts before the last lands.
+ */
+export const PART_RAMP = 0.07;
+export const PART_STAGGER = 0.0035;
 
 /**
  * Stage bands in order. `label` shows while progress < `until` (0–1).
