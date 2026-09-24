@@ -42,7 +42,7 @@ export const products = [
   },
   {
     id: 'lvl',
-    name: 'LVL headers',
+    name: 'LVL header',
     type: 'LVL',
     color: '#bd9053',
     stage: 0.45,
@@ -82,19 +82,11 @@ export const products = [
   },
   {
     id: 'mdf',
-    name: 'Interior finishes',
-    type: 'MDF',
+    name: 'MDF',
+    type: 'TRIM & CABINETS',
     color: '#e8d7b3',
     stage: 0.91,
     desc: 'Medium-density fibreboard is used for interior trim and cabinetry. Select this material to reveal the simplified cabinet and interior trim elements.',
-  },
-  {
-    id: 'particle',
-    name: 'Cabinet cores',
-    type: 'PARTICLEBOARD',
-    color: '#bda67d',
-    stage: 0.96,
-    desc: 'Particleboard is another West Fraser panel family. A cabinet-core application is illustrated here to extend the supplied house reference; product specifications and availability vary by region.',
   },
 ];
 function texture(kind) {
@@ -216,7 +208,7 @@ export function createHouse() {
   for (const p of products)
     mats[p.id] = new THREE.MeshStandardMaterial({
       color: p.color,
-      map: ['webstock', 'rim', 'walls', 'particle'].includes(p.id) ? osb : wood,
+      map: ['webstock', 'rim', 'walls'].includes(p.id) ? osb : wood,
       roughness: 0.84,
     });
   mats.siding = new THREE.MeshStandardMaterial({
@@ -892,9 +884,9 @@ export function createHouse() {
   box('deck', 9.32, 1.77, 0.815, 0.16, 0.1, 8.07);
   box('deck', 9.32, 0.83, 0.815, 0.09, 0.08, 8.14);
   box('deck', 9.32, 0.33, 0.815, 0.12, 0.35, 8.11);
-  // Interior cabinet carcasses and MDF fronts; structural products stay independent.
+  // Interior MDF cabinets (carcass, front, top) and pulls; structural products stay independent.
   for (let x = 2.6; x < 5.1; x += 0.65) {
-    box('particle', x, 1.15, -2.95, 0.6, 0.94, 0.6);
+    box('mdf', x, 1.15, -2.95, 0.6, 0.94, 0.6);
     box('mdf', x, 1.16, -2.63, 0.56, 0.85, 0.04);
     box('mdf', x, 1.66, -2.94, 0.65, 0.065, 0.7);
     box('trim', x + 0.17, 1.33, -2.594, 0.025, 0.16, 0.025);

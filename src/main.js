@@ -212,7 +212,7 @@ function updateParts(dt) {
     mesh.visible = f > 0 && !cutHide;
     if (
       selected &&
-      ['mdf', 'particle', 'webstock', 'floor', 'plates', 'rim'].includes(selected) &&
+      ['mdf', 'webstock', 'floor', 'plates', 'rim'].includes(selected) &&
       data.product !== selected &&
       data.product !== 'base'
     )
