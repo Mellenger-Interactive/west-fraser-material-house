@@ -419,6 +419,40 @@ export function createHouse() {
         onFace('siding', (a + b) / 2, yc, bw, bh, 0.1325, 0.02, { geo, cut });
       }
     }
+    // Windows and doors, hiding with the wall on a cut wall (opts.fit false: filled elsewhere,
+    // like the garage door). Casings sit on the siding; glass is in the sheathing plane.
+    if (opts.fit !== false)
+      for (const [u0, u1, sill, head] of openings) {
+        const w = u1 - u0,
+          mid = (u0 + u1) / 2,
+          o = { cut },
+          base = Math.max(sill, 0),
+          trim = (u, yy, ww, hh, n = 0.155, dep = 0.025) =>
+            onFace('trim', u, yy, ww, hh, n, dep, o);
+        trim(mid, y + head + 0.045, w + 0.19, 0.09); // head casing
+        for (const u of [u0 - 0.045, u1 + 0.045]) trim(u, y + (base + head) / 2, 0.09, head - base);
+        if (sill > 0.12) {
+          // Double-hung window: sill, glass and a meeting rail.
+          trim(mid, y + sill - 0.025, w + 0.24, 0.05, 0.1675, 0.05);
+          onFace('glass', mid, y + (sill + head) / 2, w - 0.004, head - sill - 0.004, 0.1, 0.01, o);
+          trim(mid, y + (sill + head) / 2, w - 0.01, 0.05, 0.11, 0.04);
+        } else {
+          const b = y - 0.0075, // subfloor top
+            h = y + head - b;
+          if (w > 1.5) {
+            // Glazed two-panel patio door.
+            for (const sd of [-1, 1])
+              onFace('glass', mid + (sd * w) / 4, b + h / 2, w / 2 - 0.08, h - 0.12, 0.1, 0.01, o);
+            for (const u of [u0 + 0.03, u1 - 0.03]) trim(u, b + h / 2, 0.06, h, 0.1, 0.06);
+            trim(mid, b + h / 2, 0.06, h - 0.12, 0.1, 0.06); // meeting stile between the rails
+            for (const yy of [b + 0.03, b + h - 0.03]) trim(mid, yy, w - 0.12, 0.06, 0.1, 0.06);
+          } else {
+            // Front door: a slab with a glass lite.
+            trim(mid, b + h / 2, w, h, 0.1, 0.045);
+            onFace('glass', mid, y + head - 0.55, w - 0.3, 0.8, 0.1, 0.05, o);
+          }
+        }
+      }
   }
   wall(-3.7, 3.5, 4.2, 0.66, 2.7, 'x', [[-1.7, 1.7, 0, 2.18]], false, { fit: false });
   wall(-5.8, 0, 7, 0.66, 2.7, 'z', [[-0.5, 0.7, 1.1, 2.15]]);
