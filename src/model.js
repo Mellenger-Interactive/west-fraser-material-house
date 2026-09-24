@@ -150,6 +150,31 @@ function lapTexture() {
   t.anisotropy = 4;
   return t;
 }
+// Three-tab asphalt shingles: 8 courses per 1 m tile (0.125 m exposure), 0.25 m tabs staggered by
+// half a tab, with a deterministic tab-to-tab tone variation.
+function shingleTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const ctx = c.getContext('2d');
+  let seed = 11;
+  const rnd = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 4294967296;
+  for (let i = 0; i < 8; i++)
+    for (let t = -1; t < 4; t++) {
+      const v = 205 + Math.floor(rnd() * 50),
+        x0 = t * 64 + (i % 2) * 32;
+      ctx.fillStyle = `rgb(${v},${v},${v})`;
+      ctx.fillRect(x0, i * 32, 64, 32);
+      ctx.fillStyle = 'rgba(0,0,0,0.45)';
+      ctx.fillRect(x0, i * 32, 2, 32); // tab cut
+    }
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  for (let i = 0; i < 8; i++) ctx.fillRect(0, i * 32 + 29, 256, 3); // course shadow line
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 4;
+  return t;
+}
 // Unit box whose UVs come from map(normal, x, y, z) in metres (x, y, z local, -0.5..0.5), divided
 // by the texture's tile size, so textures keep their scale and line up across pieces.
 function uvBox(tile, map) {
@@ -180,7 +205,11 @@ export function createHouse() {
     roughness: 0.85,
   });
   mats.trim = new THREE.MeshStandardMaterial({ color: '#f5f2e5', roughness: 0.75 });
-  mats.shingle = new THREE.MeshStandardMaterial({ color: '#414948', roughness: 1 });
+  mats.shingle = new THREE.MeshStandardMaterial({
+    color: '#4d5655',
+    map: shingleTexture(),
+    roughness: 1,
+  });
   mats.base = new THREE.MeshStandardMaterial({ color: '#a7aaa1', roughness: 1 });
   mats.glass = new THREE.MeshStandardMaterial({
     color: '#819b9a',
@@ -526,21 +555,40 @@ export function createHouse() {
             piece('roof', row / 2, b, 0.05, 0.055, z0, z1, 0.018, 0.018, cut && side === 1);
         }
       }
-      if (!cut || side === -1) {
-        const zA = cz - d / 2 - 0.26,
-          zB = cz + d / 2 + 0.26;
-        for (let j = 0; j < 12; j++) {
-          const a = j / 12,
-            b = (j + 1) / 12;
-          if (!onClip || b <= fc + 1e-6) {
-            piece('shingle', a, b, 0.095, 0.035, zA, zB, 0.008, 0, cut);
-            continue;
-          }
-          // Beyond the clip line the strip only exists in front of and behind the upper storey.
-          if (clip.z[0] > zA) piece('shingle', a, b, 0.095, 0.035, zA, clip.z[0], 0.008, 0, cut);
-          if (clip.z[1] < zB) piece('shingle', a, b, 0.095, 0.035, clip.z[1], zB, 0.008, 0, cut);
-          if (a < fc) piece('shingle', a, fc, 0.095, 0.035, clip.z[0], clip.z[1], 0.008, 0, cut);
-        }
+      // Shingles: one textured sheet per slope, split only where the slope is clipped. Every slope
+      // is shingled; on a cut roof the cut side's shingles hide with its sheathing. UVs run along
+      // the ridge (u) and up from the eave (v) so the courses line up across sheets.
+      const zA = cz - d / 2 - 0.26,
+        zB = cz + d / 2 + 0.26;
+      const sheet = (a, b, z0, z1) => {
+        const dz = z1 - z0,
+          zc = (z0 + z1) / 2,
+          len = slopeW * (b - a);
+        const geo = uvBox(1, (nr, X, Y, Z) => [
+          zc + Z * dz,
+          slopeW * (side === 1 ? 1 - a - (X + 0.5) * (b - a) : 1 - b + (X + 0.5) * (b - a)),
+        ]);
+        box(
+          'shingle',
+          cx + side * H * ((a + b) / 2),
+          y + rise * (1 - (a + b) / 2) + 0.095,
+          zc,
+          len,
+          0.035,
+          dz,
+          {
+            rot: [0, 0, -angle],
+            cut: cut && side === 1,
+            geo,
+          },
+        );
+      };
+      if (!onClip) sheet(0, 1, zA, zB);
+      else {
+        // Beyond the clip line the slope only exists in front of and behind the upper storey.
+        if (clip.z[0] > zA) sheet(0, 1, zA, clip.z[0]);
+        if (clip.z[1] < zB) sheet(0, 1, clip.z[1], zB);
+        sheet(0, fc, clip.z[0], clip.z[1]);
       }
       // Fascia on the truss tails, tucked under the deck edge, between the rake boards. On a
       // clipped slope it only runs where the eave exists and stops on the wall plate below.
@@ -703,6 +751,13 @@ export function createHouse() {
       rot: [Math.atan(slope), 0, 0],
       cut: true,
     });
+  const pLen = (z1 + 0.02 - z0) / c,
+    pz = (z0 + z1 + 0.02) / 2;
+  box('shingle', 0.1, deckY(pz) + 0.045 / c, pz, 3.31, 0.035, pLen, {
+    rot: [Math.atan(slope), 0, 0],
+    cut: true,
+    geo: uvBox(1, (nr, X, Y, Z) => [0.1 + X * 3.31, pLen * (0.5 - Z)]),
+  });
   box('trim', 0.1, rafterBottom(z1) + 0.05, z1 + 0.0325, 3.35, 0.2, 0.025, { cut: true }); // fascia
   for (let x = 6.045; x < 9.35; x += 0.2) box('deck', x, 0.58, 0.8, 0.188, 0.12, 8.25);
   for (const z of [-3.3, 4.93]) {
