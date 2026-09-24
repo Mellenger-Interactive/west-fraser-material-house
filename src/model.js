@@ -838,8 +838,13 @@ export function createHouse() {
   const beamTop = 3.24,
     slope = (3.58 - beamTop) / (4.9 - ledgerFace),
     rafterBottom = (z) => 3.58 - slope * (z - ledgerFace);
-  for (const x of [-1.45, 0.1, 1.65])
-    box('trim', x, (porchTop + beamTop - 0.24) / 2, 4.9, 0.15, beamTop - 0.24 - porchTop, 0.15);
+  // Treated posts (shown in the wood-only view) inside white post wraps (a finish).
+  for (const x of [-1.45, 0.1, 1.65]) {
+    const postY = (porchTop + beamTop - 0.24) / 2,
+      postH = beamTop - 0.24 - porchTop;
+    box('deck', x, postY, 4.9, 0.13, postH, 0.13);
+    box('trim', x, postY, 4.9, 0.15, postH, 0.15);
+  }
   box('lvl', 0.1, beamTop - 0.12, 4.9, 3.3, 0.24, 0.14);
   box('framing', 0.1, 3.58, 2.775, 3.3, 0.24, 0.075); // ledger on the 2nd-floor rim
   const c = Math.cos(Math.atan(slope)),
