@@ -233,7 +233,7 @@ export function createHouse() {
   // (wall base 0.66 + 2.7 + half a plate), and its walls stand on its subfloor.
   const upperFloor = 0.66 + 2.7 + 0.0425 + 0.1775,
     upperWall = upperFloor + 0.2325 + 0.0425;
-  floor(0.1, -0.2, 4.4, 5.8, upperFloor);
+  floor(0, -0.4, 4.4, 6.2, upperFloor); // flush with the ground-floor back wall
   function wall(x, z, length, y, height, axis = 'x', openings = [], cut = false) {
     const horizontal = (along, yy, w, h, id = 'framing', dep = 0.14) =>
       axis === 'x' ? box(id, x + along, yy, z, w, h, dep) : box(id, x, yy, z + along, dep, h, w);
@@ -366,9 +366,9 @@ export function createHouse() {
     ],
     true,
   );
-  wall(0, -3.1, 4.4, upperWall, 2.65, 'x', [[-0.65, 0.65, 0.8, 1.95]]);
-  wall(-2.2, -0.2, 5.8, upperWall, 2.65, 'z');
-  wall(2.2, -0.2, 5.8, upperWall, 2.65, 'z', [[-1.3, 0.1, 0.8, 1.95]], true);
+  wall(0, -3.5, 4.4, upperWall, 2.65, 'x', [[-0.65, 0.65, 0.8, 1.95]]);
+  wall(-2.2, -0.4, 6.2, upperWall, 2.65, 'z');
+  wall(2.2, -0.4, 6.2, upperWall, 2.65, 'z', [[-1.1, 0.3, 0.8, 1.95]], true);
   // clip = { side, x, z: [zMin, zMax] }: inside that z-range the roof's `side` slope stops at x
   // (an upper storey's wall face), with part trusses; outside it the slope runs to its eave.
   function roof(cx, cz, w, d, y, rise, cut = false, clip = null) {
@@ -450,9 +450,9 @@ export function createHouse() {
   }
   // The lower roofs stop at the 2nd storey's outer wall faces (the siding strips on the left)
   // where it sits over them, and run full to their inner eaves in front of it.
-  const upperZ = [-3.1 - 0.1225, 2.7 + 0.1225];
+  const upperZ = [-3.5 - 0.1225, 2.7 + 0.1225];
   roof(-3.8, 0, 4, 7, 3.42, 1.85, false, { side: 1, x: -2.39, z: upperZ });
-  roof(0, -0.2, 4.4, 5.8, upperWall + 2.7, 1.9, true);
+  roof(0, -0.4, 4.4, 6.2, upperWall + 2.7, 1.9, true);
   roof(3.9, 0, 3.8, 7, 3.42, 2.15, true, { side: -1, x: 2.3225, z: upperZ });
   // Garage door and limited finished siding retain the reference's cutaway identity.
   box('trim', -3.7, 1.755, 3.62, 3.35, 2.17, 0.07); // fills the opening up to the header
@@ -468,7 +468,7 @@ export function createHouse() {
         0.035,
       );
   for (let yy = upperWall + 0.04; yy < upperWall + 2.58; yy += 0.16)
-    box('context', -2.356, yy, -0.2, 0.065, 0.143, 5.8);
+    box('context', -2.356, yy, -0.4, 0.065, 0.143, 6.2);
   for (let yy = 0.8; yy < 3.35; yy += 0.16) box('context', -5.945, yy, 0, 0.04, 0.145, 7);
   // Front porch: a deck just below the interior floor on treated joists, skirted down to a slab,
   // with steps in line with the front door. Its shed roof hangs from a ledger on the 2nd-floor rim,
