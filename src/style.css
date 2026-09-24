@@ -26,61 +26,11 @@ input:focus-visible {
   outline: 3px solid #d78b31;
   outline-offset: 4px;
 }
-header {
-  height: 98px;
-  padding: 0 42px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid #dce2dc;
-  background: #fff;
-}
-.brand {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  text-decoration: none;
-  color: #164a38;
-}
-.brand-mark {
-  font-family: serif;
-  font-size: 48px;
-  font-weight: bold;
-  letter-spacing: -12px;
-  transform: skewY(-8deg);
-  padding-right: 12px;
-}
-.brand strong {
-  font-family: Manrope, sans-serif;
-  font-size: 24px;
-  letter-spacing: -1px;
-}
-.brand strong span {
-  display: block;
-  font-size: 8px;
-  letter-spacing: 2px;
-  margin-top: 3px;
-}
-.header-note {
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 2px;
-}
-.header-note span {
-  color: #a0b3a7;
-  margin: 0 17px;
-}
-.text-button {
-  border: 0;
-  background: none;
-  color: #204e3e;
-  font-size: 13px;
-}
 main {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 350px;
   min-height: 620px;
-  height: calc(100vh - 243px);
+  height: calc(100vh - 145px);
 }
 .scene {
   position: relative;
@@ -387,12 +337,6 @@ input[type='range'] {
   }
 }
 @media (max-width: 1000px) {
-  header {
-    padding: 0 22px;
-  }
-  .header-note {
-    display: none;
-  }
   main {
     grid-template-columns: minmax(0, 1fr) 300px;
   }
@@ -419,18 +363,6 @@ input[type='range'] {
   }
 }
 @media (max-width: 700px) {
-  header {
-    height: 76px;
-  }
-  .brand strong {
-    font-size: 19px;
-  }
-  .brand-mark {
-    font-size: 38px;
-  }
-  .text-button {
-    font-size: 11px;
-  }
   main {
     display: flex;
     flex-direction: column;

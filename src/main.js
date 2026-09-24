@@ -323,26 +323,6 @@ async function exportModel() {
     }),
   );
 }
-$('#export').onclick = async () => {
-  const button = $('#export');
-  button.textContent = 'Preparing model…';
-  button.disabled = true;
-  try {
-    const data = await exportModel();
-    const url = URL.createObjectURL(new Blob([data], { type: 'model/gltf-binary' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'west-fraser-material-house.glb';
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  } catch (err) {
-    console.error(err);
-    alert('The model could not be exported. Please try again.');
-  } finally {
-    button.textContent = 'Download 3D model ↗';
-    button.disabled = false;
-  }
-};
 window.houseExplorer = {
   parts: parts.length,
   products: products.length,
