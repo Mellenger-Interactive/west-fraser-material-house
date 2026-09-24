@@ -185,24 +185,50 @@ export function createHouse() {
   }
   // Three intersecting volumes: garage, tall main house and right wing.
   box('base', 0, 0.03, 0, 12, 0.25, 7.5);
-  box('base', 7.5, 0.02, 0.6, 3.8, 0.22, 8.3);
-  function floor(x, z, w, d, y) {
+  box('base', 7.8, 0.03, 0.725, 3.6, 0.25, 8.65); // deck slab, butting the house base
+  // notch = [x0, x1, zN] leaves x0..x1 out of the floor from zN to the front (+z) edge, framed
+  // with its own rims (the porch recess).
+  function floor(x, z, w, d, y, notch = null) {
+    const inNotch = (xx, zz) => notch && xx > notch[0] && xx < notch[1] && zz > notch[2];
     // Joists run between the rims; end rims butt between the side rims so corners don't overlap.
     for (let xx = x - w / 2 + 0.24; xx + 0.065 <= x + w / 2 - 0.0375; xx += 0.49) {
-      box('webstock', xx, y, z, 0.06, 0.25, d - 0.075);
-      box('framing', xx, y + 0.15, z, 0.13, 0.055, d - 0.075);
-      box('framing', xx, y - 0.15, z, 0.13, 0.055, d - 0.075);
+      if (notch && [notch[0], notch[1]].some((e) => Math.abs(xx - e) < 0.065 + 0.0375)) continue;
+      const z0 = z - d / 2 + 0.0375,
+        z1 = inNotch(xx, z + d / 2) ? notch[2] - 0.0375 : z + d / 2 - 0.0375;
+      box('webstock', xx, y, (z0 + z1) / 2, 0.06, 0.25, z1 - z0);
+      box('framing', xx, y + 0.15, (z0 + z1) / 2, 0.13, 0.055, z1 - z0);
+      box('framing', xx, y - 0.15, (z0 + z1) / 2, 0.13, 0.055, z1 - z0);
     }
-    for (const zz of [z - d / 2, z + d / 2]) box('rim', x, y, zz, w + 0.075, 0.355, 0.075);
-    for (const xx of [x - w / 2, x + w / 2]) box('rim', xx, y, z, 0.075, 0.355, d - 0.075);
+    const rimX = (a, b, zz) => box('rim', (a + b) / 2, y, zz, b - a, 0.355, 0.075),
+      rimZ = (xx, a, b) => box('rim', xx, y, (a + b) / 2, 0.075, 0.355, b - a),
+      xa = x - w / 2 - 0.0375,
+      xb = x + w / 2 + 0.0375;
+    rimX(xa, xb, z - d / 2);
+    if (notch) {
+      rimX(xa, notch[0] + 0.0375, z + d / 2);
+      rimX(notch[1] - 0.0375, xb, z + d / 2);
+      rimX(notch[0] - 0.0375, notch[1] + 0.0375, notch[2]);
+      for (const e of [notch[0], notch[1]]) rimZ(e, notch[2] + 0.0375, z + d / 2 - 0.0375);
+    } else rimX(xa, xb, z + d / 2);
+    for (const xx of [x - w / 2, x + w / 2]) rimZ(xx, z - d / 2 + 0.0375, z + d / 2 - 0.0375);
     for (let xx = x - w / 2; xx < x + w / 2 - 0.1; xx += 1.2)
       for (let zz = z - d / 2; zz < z + d / 2 - 0.1; zz += 2.4) {
         const pw = Math.min(1.2, x + w / 2 - xx),
           pd = Math.min(2.4, z + d / 2 - zz);
-        box('floor', xx + pw / 2, y + 0.2, zz + pd / 2, pw - 0.018, 0.065, pd - 0.018);
+        // Panels crossing the notch edges are split and the part inside the notch left out.
+        const xs = [xx, xx + pw, ...(notch ?? []).slice(0, 2).filter((e) => e > xx && e < xx + pw)],
+          zs = [zz, zz + pd, ...(notch && notch[2] > zz && notch[2] < zz + pd ? [notch[2]] : [])];
+        xs.sort((a, b) => a - b);
+        zs.sort((a, b) => a - b);
+        for (let i = 0; i < xs.length - 1; i++)
+          for (let j = 0; j < zs.length - 1; j++) {
+            const [a, b, c, e] = [xs[i], xs[i + 1], zs[j], zs[j + 1]];
+            if (inNotch((a + b) / 2, (c + e) / 2)) continue;
+            box('floor', (a + b) / 2, y + 0.2, (c + e) / 2, b - a - 0.018, 0.065, e - c - 0.018);
+          }
       }
   }
-  floor(0, 0, 11.6, 7, 0.42);
+  floor(0, 0, 11.6, 7, 0.42, [-1.6, 1.6, 2.7]); // porch recess left out
   // The 2nd storey sits on the ground walls: its joists and rim bear on the double top plate
   // (wall base 0.66 + 2.7 + half a plate), and its walls stand on its subfloor.
   const upperFloor = 0.66 + 2.7 + 0.0425 + 0.1775,
@@ -444,18 +470,62 @@ export function createHouse() {
   for (let yy = upperWall + 0.04; yy < upperWall + 2.58; yy += 0.16)
     box('context', -2.356, yy, -0.2, 0.065, 0.143, 5.8);
   for (let yy = 0.8; yy < 3.35; yy += 0.16) box('context', -5.945, yy, 0, 0.04, 0.145, 7);
-  // Front porch with shed roof and separate boards.
-  for (let x = -1.95; x <= 1.95; x += 0.22) box('deck', x, 0.6, 3.9, 0.205, 0.11, 2.2);
-  for (const x of [-2, 0, 2]) box('trim', x, 1.9, 4.9, 0.15, 2.55, 0.15);
-  for (let z = 2.9; z < 5; z += 0.52)
-    box('roof', 0, 3.48 - (z - 2.9) * 0.2, z + 0.24, 4.5, 0.06, 0.54, {
-      rot: [-0.197, 0, 0],
+  // Front porch: a deck just below the interior floor on treated joists, skirted down to a slab,
+  // with steps in line with the front door. Its shed roof hangs from a ledger on the 2nd-floor rim,
+  // rests on a beam over three posts, and fits between the garage and right-wing eaves.
+  const porchTop = 0.63,
+    porchFront = 5.1,
+    recessFace = 2.7 + 0.1225, // recess wall sheathing
+    frontFace = 3.5 + 0.1225; // garage / right-wing front wall sheathing
+  box('base', 0, 0.03, 4.4125, 3.9, 0.25, 1.325); // porch slab, continuing the house base
+  for (let k = -8; k <= 8; k++) {
+    const x = k * 0.2275,
+      z0 = (Math.abs(k) <= 6 ? recessFace : frontFace) + 0.005;
+    box('deck', x, porchTop - 0.055, (z0 + porchFront) / 2, 0.205, 0.11, porchFront - z0);
+  }
+  for (const z of [2.95, 3.35]) box('deck', 0, porchTop - 0.205, z, 3.125, 0.19, 0.045); // recess
+  for (const z of [3.7, 4.15, 4.6, 5.0]) box('deck', 0, porchTop - 0.205, z, 3.725, 0.19, 0.045);
+  const skirtY = (0.155 + porchTop - 0.11) / 2,
+    skirtH = porchTop - 0.11 - 0.155;
+  for (const x of [-1.8875, 1.8875])
+    box('deck', x, skirtY, (frontFace + 5.025) / 2, 0.05, skirtH, 5.025 - frontFace);
+  box('deck', 0, skirtY, 5.05, 3.825, skirtH, 0.05);
+  for (let i = 1; i <= 3; i++) {
+    const top = porchTop - 0.19 * i;
+    box('deck', -0.8, (top - 0.13) / 2, 5.075 + 0.28 * (i - 0.5), 1.1, top + 0.13, 0.28);
+  }
+  const beamTop = 3.24,
+    slope = (3.58 - beamTop) / (4.9 - (recessFace - 0.01)),
+    rafterBottom = (z) => 3.58 - slope * (z - (recessFace - 0.01));
+  for (const x of [-1.45, 0.1, 1.65])
+    box('trim', x, (porchTop + beamTop - 0.24) / 2, 4.9, 0.15, beamTop - 0.24 - porchTop, 0.15);
+  box('lvl', 0.1, beamTop - 0.12, 4.9, 3.3, 0.24, 0.14);
+  box('framing', 0.1, 3.58, 2.775, 3.3, 0.24, 0.075); // ledger on the 2nd-floor rim
+  const c = Math.cos(Math.atan(slope)),
+    z0 = recessFace - 0.01,
+    z1 = porchFront + 0.02;
+  for (const x of [-1.5, -0.7, 0.1, 0.9, 1.7])
+    beam(
+      'framing',
+      [x, rafterBottom(z0) + 0.07 / c, z0],
+      [x, rafterBottom(z1) + 0.07 / c, z1],
+      0.045,
+      0.14,
+    );
+  const deckY = (z) => rafterBottom(z) + 0.14 / c + 0.0275 / c,
+    zm = (z0 + z1 + 0.02) / 2;
+  for (const [a, b] of [
+    [z0, zm],
+    [zm, z1 + 0.02],
+  ])
+    box('roof', 0.1, deckY((a + b) / 2), (a + b) / 2, 3.31, 0.055, (b - a) / c - 0.018, {
+      rot: [Math.atan(slope), 0, 0],
       cut: true,
     });
-  box('deck', 0, 0.38, 5.07, 4.25, 0.3, 0.2);
+  box('trim', 0.1, rafterBottom(z1) + 0.05, z1 + 0.0325, 3.35, 0.2, 0.025, { cut: true }); // fascia
   for (let x = 6.02; x < 9.35; x += 0.2) box('deck', x, 0.58, 0.8, 0.188, 0.12, 8.25);
   for (const z of [-3.3, 4.93]) {
-    box('deck', 7.67, 0.34, z, 3.7, 0.33, 0.12);
+    box('deck', 7.68, 0.33, z, 3.68, 0.35, 0.12);
     for (const x of [5.98, 7.65, 9.32]) box('deck', x, 1.15, z, 0.13, 1.25, 0.13);
     box('deck', 7.65, 1.77, z, 3.5, 0.1, 0.16);
     box('deck', 7.65, 0.83, z, 3.5, 0.08, 0.09);
@@ -465,7 +535,7 @@ export function createHouse() {
   for (let z = -3.2; z < 4.9; z += 0.22) box('deck', 9.32, 1.28, z, 0.055, 0.86, 0.055);
   box('deck', 9.32, 1.77, 0.815, 0.16, 0.1, 8.07);
   box('deck', 9.32, 0.83, 0.815, 0.09, 0.08, 8.14);
-  box('deck', 9.32, 0.34, 0.815, 0.12, 0.33, 8.11);
+  box('deck', 9.32, 0.33, 0.815, 0.12, 0.35, 8.11);
   // Interior cabinet carcasses and MDF fronts; structural products stay independent.
   for (let x = 2.6; x < 5.1; x += 0.65) {
     box('particle', x, 1.15, -2.95, 0.6, 0.94, 0.6);
