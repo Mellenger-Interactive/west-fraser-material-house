@@ -241,10 +241,41 @@ export function createHouse() {
     opacity: 0.45,
     depthWrite: false,
   });
+  // West Fraser OSB has a green edge seal. OSB parts use a panel geometry whose two broad faces
+  // take the product material and whose four edges take a green edge material (one per product,
+  // so selection dims and highlights the edges with their product).
+  const OSB = ['webstock', 'rim', 'walls'];
+  for (const id of OSB) {
+    mats[`${id}Edge`] = new THREE.MeshStandardMaterial({
+      name: 'OSB edge seal',
+      color: '#08564f',
+      roughness: 0.6,
+    });
+    mats[`${id}Edge`].userData.product = id;
+  }
   const boxGeo = new THREE.BoxGeometry(1, 1, 1);
+  // Unit boxes regrouped as [2 broad faces, 4 edges], one per thin axis (x, y, z). BoxGeometry
+  // builds its faces in +x, -x, +y, -y, +z, -z order, 6 indices each.
+  const panelGeos = [0, 1, 2].map((k) => {
+    const g = new THREE.BoxGeometry(1, 1, 1),
+      idx = Array.from(g.index.array),
+      faces = [2 * k, 2 * k + 1, ...[0, 1, 2, 3, 4, 5].filter((f) => f >> 1 !== k)];
+    g.setIndex(faces.flatMap((f) => idx.slice(f * 6, f * 6 + 6)));
+    g.clearGroups();
+    g.addGroup(0, 12, 0);
+    g.addGroup(12, 24, 1);
+    return g;
+  });
   function box(id, x, y, z, w, h, d, opts = {}) {
     const { geo, ...data } = opts; // geo: a non-box geometry (gables); kept out of userData
-    const mesh = new THREE.Mesh(geo ?? boxGeo, mats[id]);
+    // OSB: the thinnest axis is the panel thickness. A gable's ExtrudeGeometry already groups
+    // its caps (0) and sides (1), so it takes the same [face, edge] materials.
+    const osb = OSB.includes(id),
+      thin = [w, h, d].indexOf(Math.min(w, h, d));
+    const mesh = new THREE.Mesh(
+      geo ?? (osb ? panelGeos[thin] : boxGeo),
+      osb ? [mats[id], mats[`${id}Edge`]] : mats[id],
+    );
     mesh.scale.set(w, h, d);
     mesh.position.set(x, y, z);
     if (opts.rot) mesh.rotation.set(...opts.rot);
@@ -410,6 +441,8 @@ export function createHouse() {
         else mesh.position.x += 0.1 * out;
         mesh.userData.basePosition = mesh.position.toArray();
         mesh.userData.cut = cut;
+        // Edges stay green on strips narrower than the sheathing is thick.
+        mesh.geometry = panelGeos[axis === 'x' ? 2 : 0];
       }
     }
     // Lap siding over the sheathing, split around the openings. Courses follow world height so

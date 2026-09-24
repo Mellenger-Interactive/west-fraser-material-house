@@ -196,9 +196,10 @@ const FINISHES = ['siding', 'shingle', 'trim', 'glass'];
 function updateParts(dt) {
   explodeValue = THREE.MathUtils.damp(explodeValue, exploded ? 1 : 0, reduced ? 100 : 5, dt);
   for (const [id, mat] of Object.entries(mats)) {
+    const product = mat.userData.product ?? id; // OSB edge materials follow their product
     mat.color.copy(originalColors[id]);
-    if (selected && id !== selected) mat.color.lerp(new THREE.Color('#e6e9df'), 0.76);
-    mat.emissive.set(selected === id ? '#40331b' : '#000000');
+    if (selected && product !== selected) mat.color.lerp(new THREE.Color('#e6e9df'), 0.76);
+    mat.emissive.set(selected === product ? '#40331b' : '#000000');
     mat.emissiveIntensity = 0.12;
   }
   let visible = 0;
@@ -245,15 +246,23 @@ function tick(now) {
   requestAnimationFrame(tick);
 }
 requestAnimationFrame(tick);
+// Export copies of each part's material(s) at their original colour, without selection dimming.
+const matKey = new Map(Object.entries(mats).map(([id, m]) => [m, id]));
+function exportMaterial(mat) {
+  const copy = mat.clone();
+  copy.color.copy(originalColors[matKey.get(mat)]);
+  copy.emissive.set(0);
+  return copy;
+}
 async function exportModel() {
   const out = new THREE.Group();
   out.name = 'West_Fraser_Demo_House';
   const tracks = [];
   for (const [i, part] of parts.entries()) {
     const m = part.clone();
-    m.material = part.material.clone();
-    m.material.color.copy(originalColors[part.userData.product]);
-    m.material.emissive.set(0);
+    m.material = Array.isArray(part.material)
+      ? part.material.map(exportMaterial)
+      : exportMaterial(part.material);
     m.visible = true;
     m.position.fromArray(part.userData.basePosition);
     m.scale.fromArray(part.userData.baseScale);
