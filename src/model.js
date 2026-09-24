@@ -153,7 +153,8 @@ export function createHouse() {
   });
   const boxGeo = new THREE.BoxGeometry(1, 1, 1);
   function box(id, x, y, z, w, h, d, opts = {}) {
-    const mesh = new THREE.Mesh(boxGeo, mats[id]);
+    const { geo, ...data } = opts; // geo: a non-box geometry (gables); kept out of userData
+    const mesh = new THREE.Mesh(geo ?? boxGeo, mats[id]);
     mesh.scale.set(w, h, d);
     mesh.position.set(x, y, z);
     if (opts.rot) mesh.rotation.set(...opts.rot);
@@ -165,7 +166,7 @@ export function createHouse() {
       product: id,
       stage: p?.stage ?? (id === 'base' ? 0 : 0.92),
       cut: !!opts.cut,
-      ...opts,
+      ...data,
     };
     mesh.userData.basePosition = mesh.position.toArray();
     mesh.userData.baseScale = mesh.scale.toArray();
@@ -378,23 +379,31 @@ export function createHouse() {
   wall(2.2, -0.4, 6.2, upperWall, 2.65, 'z', [[-1.1, 0.3, 0.8, 1.95]], true);
   // clip = { side, x, z: [zMin, zMax] }: inside that z-range the roof's `side` slope stops at x
   // (an upper storey's wall face), with part trusses; outside it the slope runs to its eave.
-  function roof(cx, cz, w, d, y, rise, cut = false, clip = null) {
+  // gables = [{ z, x0, x1, yBase }]: gable-end sheathing panels in the end walls' sheathing planes.
+  // y is where the bottom chords bear (on the walls' double top plate).
+  function roof(cx, cz, w, d, y, rise, cut = false, clip = null, gables = []) {
     const H = w / 2 + 0.22, // ridge to eave, horizontally
       left = cx - H,
-      right = cx + H;
+      right = cx + H,
+      cosA = Math.cos(Math.atan2(rise, H)),
+      E = H - 0.1; // chord tails stop behind the fascia
     const fc = clip ? Math.abs(clip.x - cx) / H : 1, // clip line as a fraction ridge -> eave
       clipped = (z0, z1) => clip && z1 > clip.z[0] && z0 < clip.z[1];
-    for (let z = cz - d / 2 - 0.2; z <= cz + d / 2 + 0.25; z += 0.54) {
-      const s = clipped(z - 0.07, z + 0.07) ? clip.side : 0,
+    // Same truss count as before, spread so the end trusses sit on the end walls.
+    const n = Math.floor((d + 0.45) / 0.54);
+    for (let i = 0; i <= n; i++) {
+      const z = cz - d / 2 + (d * i) / n,
+        s = clipped(z - 0.07, z + 0.07) ? clip.side : 0,
         apex = [cx, y + rise, z],
-        stop = [clip?.x, y + rise * (1 - fc), z];
+        stop = [clip?.x, y + rise * (1 - fc), z],
+        tail = y + rise * (1 - E / H);
       // Part truss on the clipped side: its top chord and the bottom chord end at the wall face.
-      beam('trusses', s === -1 ? stop : [left, y, z], apex, 0.1, 0.14);
-      beam('trusses', apex, s === 1 ? stop : [right, y, z], 0.1, 0.14);
+      beam('trusses', s === -1 ? stop : [cx - E, tail, z], apex, 0.1, 0.14);
+      beam('trusses', apex, s === 1 ? stop : [cx + E, tail, z], 0.1, 0.14);
       beam(
         'trusses',
-        s === -1 ? [clip.x, y, z] : [left, y, z],
-        s === 1 ? [clip.x, y, z] : [right, y, z],
+        s === -1 ? [clip.x, y, z] : [cx - E, y, z],
+        s === 1 ? [clip.x, y, z] : [cx + E, y, z],
         0.1,
         0.14,
       );
@@ -449,18 +458,75 @@ export function createHouse() {
           if (a < fc) piece('shingle', a, fc, 0.095, 0.035, clip.z[0], clip.z[1], 0.008, 0, cut);
         }
       }
+      // Fascia on the truss tails, tucked under the deck edge, between the rake boards. On a
+      // clipped slope it only runs where the eave exists and stops on the wall plate below.
+      const fTop = y + rise * (0.035 / H) + 0.05 - 0.0275 / cosA - 0.005,
+        fBot = y - (onClip ? 0.05 : 0.07),
+        fz = [cz - d / 2 - 0.17, cz + d / 2 + 0.17];
+      for (const [a, b] of onClip
+        ? [
+            [fz[0], clip.z[0]],
+            [clip.z[1], fz[1]],
+          ]
+        : [fz])
+        if (b - a > 0.05)
+          box(
+            'trim',
+            cx + side * (H - 0.0475),
+            (fTop + fBot) / 2,
+            (a + b) / 2,
+            0.025,
+            fTop - fBot,
+            b - a,
+            {
+              cut: cut && side === 1,
+            },
+          );
     }
     for (const z of [cz - d / 2 - 0.25, cz + d / 2 + 0.25]) {
       beam('trim', [left, y + 0.03, z], [cx, y + rise + 0.03, z], 0.14, 0.16, { cut });
       beam('trim', [cx, y + rise + 0.03, z], [right, y + 0.03, z], 0.14, 0.16, { cut });
     }
+    // Gable sheathing: from the wall sheathing up to the top of the end truss's chords.
+    const topAt = (x) => y + rise * (1 - Math.abs(x - cx) / H) + 0.05 / cosA - 0.005;
+    for (const { z, x0, x1, yBase } of gables) {
+      const pts = [
+        [x0, yBase],
+        [x1, yBase],
+        [x1, topAt(x1)],
+        ...(x0 < cx && cx < x1 ? [[cx, topAt(cx)]] : []),
+        [x0, topAt(x0)],
+      ];
+      const mx = (x0 + x1) / 2,
+        my = (yBase + Math.max(...pts.map((p) => p[1]))) / 2;
+      const geo = new THREE.ExtrudeGeometry(
+        new THREE.Shape(pts.map(([px, py]) => new THREE.Vector2(px - mx, py - my))),
+        { depth: 0.045, bevelEnabled: false },
+      );
+      geo.translate(0, 0, -0.0225);
+      box('walls', mx, my, z, 1, 1, 1, { geo });
+    }
   }
   // The lower roofs stop at the 2nd storey's outer wall faces (the siding strips on the left)
   // where it sits over them, and run full to their inner eaves in front of it.
   const upperZ = [-3.5 - 0.1225, 2.7 + 0.1225];
-  roof(-3.8, 0, 4, 7, 3.42, 1.85, false, { side: 1, x: -2.39, z: upperZ });
-  roof(0, -0.4, 4.4, 6.2, upperWall + 2.7, 1.9, true);
-  roof(3.9, 0, 3.8, 7, 3.42, 2.15, true, { side: -1, x: 2.3225, z: upperZ });
+  // Bottom chords bear on the walls' double top plate; gables sit in the end walls' sheathing
+  // planes (z +-0.1 outside the wall lines) above the wall sheathing.
+  const plateTop = (base, h) => base + h + 0.0425 + 0.05,
+    groundGable = 0.66 + 2.7,
+    upperGable = upperWall + 2.65;
+  roof(-3.8, 0, 4, 7, plateTop(0.66, 2.7), 1.85, false, { side: 1, x: -2.39, z: upperZ }, [
+    { z: 3.6, x0: -5.9225, x1: -1.58, yBase: groundGable },
+    { z: -3.6, x0: -5.9225, x1: -2.3225, yBase: groundGable },
+  ]);
+  roof(0, -0.4, 4.4, 6.2, plateTop(upperWall, 2.65), 1.9, true, null, [
+    { z: 2.8, x0: -2.3225, x1: 2.3225, yBase: upperGable },
+    { z: -3.6, x0: -2.3225, x1: 2.3225, yBase: upperGable },
+  ]);
+  roof(3.9, 0, 3.8, 7, plateTop(0.66, 2.7), 2.15, true, { side: -1, x: 2.3225, z: upperZ }, [
+    { z: 3.6, x0: 1.78, x1: 5.9225, yBase: groundGable },
+    { z: -3.6, x0: 2.3225, x1: 5.9225, yBase: groundGable },
+  ]);
   // Garage door and limited finished siding retain the reference's cutaway identity.
   box('trim', -3.7, 1.755, 3.62, 3.35, 2.17, 0.07); // fills the opening up to the header
   for (let row = 0; row < 4; row++)
