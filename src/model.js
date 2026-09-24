@@ -234,7 +234,9 @@ export function createHouse() {
   const upperFloor = 0.66 + 2.7 + 0.0425 + 0.1775,
     upperWall = upperFloor + 0.2325 + 0.0425;
   floor(0, -0.4, 4.4, 6.2, upperFloor); // flush with the ground-floor back wall
-  function wall(x, z, length, y, height, axis = 'x', openings = [], cut = false) {
+  // opts.out overrides which side the sheathing faces (default: away from the house centre);
+  // opts.sheathEnds = [start, end] overrides how far it runs past each end (inside corners).
+  function wall(x, z, length, y, height, axis = 'x', openings = [], cut = false, opts = {}) {
     const horizontal = (along, yy, w, h, id = 'framing', dep = 0.14) =>
       axis === 'x' ? box(id, x + along, yy, z, w, h, dep) : box(id, x, yy, z + along, dep, h, w);
     // Framing butts rather than overlaps. Walls along z sit between walls along x, so x-wall
@@ -286,9 +288,9 @@ export function createHouse() {
     // Sheet strips subdivided at opening edges preserve real holes. Sheathing sits on the
     // outside face (away from the house centre); walls along x run it past the corners and walls
     // along z butt into it, matching the framing.
-    const out = Math.sign(axis === 'x' ? z : x) || 1,
-      sEnd = length / 2 + (axis === 'x' ? 0.1225 : 0.0775);
-    const breaks = [-sEnd, sEnd, ...openings.flatMap((o) => [o[0], o[1]])];
+    const out = opts.out ?? (Math.sign(axis === 'x' ? z : x) || 1),
+      [e0, e1] = opts.sheathEnds ?? Array(2).fill(axis === 'x' ? 0.1225 : 0.0775);
+    const breaks = [-length / 2 - e0, length / 2 + e1, ...openings.flatMap((o) => [o[0], o[1]])];
     for (let a = -length / 2 + 1.2; a < length / 2; a += 1.2) breaks.push(a);
     breaks.sort((a, b) => a - b);
     for (let i = 0; i < breaks.length - 1; i++) {
@@ -352,7 +354,12 @@ export function createHouse() {
       [0.25, 1.25, 0.9, 2.1],
     ],
     true,
+    { sheathEnds: [-0.07, -0.07] },
   );
+  // Return walls close the recess sides; their sheathing faces the porch and starts at the recess
+  // wall's sheathing face (inside corner).
+  wall(-1.6, 3.1, 0.8, 0.66, 2.7, 'z', [], false, { out: 1, sheathEnds: [-0.1225, 0.0775] });
+  wall(1.6, 3.1, 0.8, 0.66, 2.7, 'z', [], true, { out: -1, sheathEnds: [-0.1225, 0.0775] });
   wall(
     0,
     2.7,
@@ -543,8 +550,9 @@ export function createHouse() {
     box('mdf', x, 1.66, -2.94, 0.65, 0.065, 0.7);
     box('trim', x + 0.17, 1.33, -2.594, 0.025, 0.16, 0.025);
   }
-  for (const x of [2.5, 5.4]) box('mdf', x, 0.77, -1.2, 0.035, 0.16, 4);
-  box('mdf', 3.95, 0.77, -3.32, 3, 0.16, 0.035);
+  // Baseboards on the floor against the right wing's side and back walls, clear of the cabinets.
+  box('mdf', 5.7125, 0.7325, -1.315, 0.035, 0.16, 4.23);
+  box('mdf', 5.2725, 0.7325, -3.4125, 0.845, 0.16, 0.035);
   house.position.x = -1;
   return { house, parts, products, mats };
 }
