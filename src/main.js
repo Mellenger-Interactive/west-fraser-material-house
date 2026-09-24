@@ -190,6 +190,9 @@ function partFraction(mesh, i, t) {
   const offset = (i % 17) * 0.001;
   return THREE.MathUtils.clamp((t - stage - offset) / Math.min(0.045, 1 - stage - offset), 0, 1);
 }
+// Exterior finishes (not products) step aside in explode view and while a material is selected,
+// so the materials stay visible.
+const FINISHES = ['siding', 'shingle', 'trim', 'glass'];
 function updateParts(dt) {
   explodeValue = THREE.MathUtils.damp(explodeValue, exploded ? 1 : 0, reduced ? 100 : 5, dt);
   for (const [id, mat] of Object.entries(mats)) {
@@ -212,6 +215,8 @@ function updateParts(dt) {
       data.product !== selected &&
       data.product !== 'base'
     )
+      mesh.visible = false;
+    if (FINISHES.includes(data.product) && (selected || exploded || explodeValue > 0.01))
       mesh.visible = false;
     const b = data.basePosition;
     mesh.position.set(b[0], b[1] + (1 - smooth) * (3 + (i % 5) * 0.35), b[2]);
