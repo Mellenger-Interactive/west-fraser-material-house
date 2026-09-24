@@ -175,6 +175,26 @@ function shingleTexture() {
   t.anisotropy = 4;
   return t;
 }
+
+// Equirectangular sky-over-ground gradient for the window glass to reflect.
+function skyTexture() {
+  const c = document.createElement('canvas');
+  c.width = 128;
+  c.height = 64;
+  const ctx = c.getContext('2d'),
+    g = ctx.createLinearGradient(0, 0, 0, 64);
+  g.addColorStop(0, '#5f86ad');
+  g.addColorStop(0.46, '#dfe8ef');
+  g.addColorStop(0.5, '#9a9d8e');
+  g.addColorStop(1, '#4f5548');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 128, 64);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.mapping = THREE.EquirectangularReflectionMapping;
+  return t;
+}
+
 // Unit box whose UVs come from map(normal, x, y, z) in metres (x, y, z local, -0.5..0.5), divided
 // by the texture's tile size, so textures keep their scale and line up across pieces.
 function uvBox(tile, map) {
@@ -211,10 +231,15 @@ export function createHouse() {
     roughness: 1,
   });
   mats.base = new THREE.MeshStandardMaterial({ color: '#a7aaa1', roughness: 1 });
+  // Clear glass: see-through, tinted, reflecting a sky gradient; it casts no shadow.
   mats.glass = new THREE.MeshStandardMaterial({
-    color: '#819b9a',
-    metalness: 0.2,
-    roughness: 0.24,
+    color: '#1d272c',
+    roughness: 0.05,
+    envMap: skyTexture(),
+    envMapIntensity: 2,
+    transparent: true,
+    opacity: 0.45,
+    depthWrite: false,
   });
   const boxGeo = new THREE.BoxGeometry(1, 1, 1);
   function box(id, x, y, z, w, h, d, opts = {}) {
@@ -223,7 +248,7 @@ export function createHouse() {
     mesh.scale.set(w, h, d);
     mesh.position.set(x, y, z);
     if (opts.rot) mesh.rotation.set(...opts.rot);
-    mesh.castShadow = true;
+    mesh.castShadow = id !== 'glass';
     mesh.receiveShadow = true;
     mesh.name = `${id}_${parts.length.toString().padStart(4, '0')}`;
     const p = products.find((p) => p.id === id);
@@ -432,10 +457,25 @@ export function createHouse() {
         trim(mid, y + head + 0.045, w + 0.19, 0.09); // head casing
         for (const u of [u0 - 0.045, u1 + 0.045]) trim(u, y + (base + head) / 2, 0.09, head - base);
         if (sill > 0.12) {
-          // Double-hung window: sill, glass and a meeting rail.
+          // Double-hung window: sill, glass, two sash frames and muntin grids (two rows per sash).
           trim(mid, y + sill - 0.025, w + 0.24, 0.05, 0.1675, 0.05);
           onFace('glass', mid, y + (sill + head) / 2, w - 0.004, head - sill - 0.004, 0.1, 0.01, o);
-          trim(mid, y + (sill + head) / 2, w - 0.01, 0.05, 0.11, 0.04);
+          const sash = (u, yy, ww, hh, dep = 0.04) => trim(u, yy, ww, hh, 0.11, dep),
+            f = 0.05, // sash frame width
+            inW = w - 2 * f,
+            cols = Math.round(w / 0.34),
+            meet = (sill + head) / 2;
+          for (const u of [u0 + f / 2, u1 - f / 2]) sash(u, y + meet, f, head - sill); // stiles
+          for (const yy of [sill + f / 2, meet, head - f / 2]) sash(mid, y + yy, inW, f); // rails
+          // Muntins; verticals and horizontals differ in depth so their crossings don't z-fight.
+          for (const [g0, g1] of [
+            [sill + f, meet - f / 2],
+            [meet + f / 2, head - f],
+          ]) {
+            for (let c = 1; c < cols; c++)
+              sash(u0 + f + (inW * c) / cols, y + (g0 + g1) / 2, 0.022, g1 - g0, 0.022);
+            sash(mid, y + (g0 + g1) / 2, inW, 0.022, 0.018);
+          }
         } else {
           const b = y - 0.0075, // subfloor top
             h = y + head - b;
@@ -447,9 +487,14 @@ export function createHouse() {
             trim(mid, b + h / 2, 0.06, h - 0.12, 0.1, 0.06); // meeting stile between the rails
             for (const yy of [b + 0.03, b + h - 0.03]) trim(mid, yy, w - 0.12, 0.06, 0.1, 0.06);
           } else {
-            // Front door: a slab with a glass lite.
-            trim(mid, b + h / 2, w, h, 0.1, 0.045);
-            onFace('glass', mid, y + head - 0.55, w - 0.3, 0.8, 0.1, 0.05, o);
+            // Front door: a slab framing a glass lite.
+            const l0 = y + head - 0.95,
+              l1 = y + head - 0.15,
+              door = (u, y0, y1, ww) => trim(u, (y0 + y1) / 2, ww, y1 - y0, 0.1, 0.045);
+            door(mid, b, l0, w);
+            door(mid, l1, y + head, w);
+            for (const u of [u0 + 0.075, u1 - 0.075]) door(u, l0, l1, 0.15);
+            onFace('glass', mid, (l0 + l1) / 2, w - 0.3, 0.8, 0.1, 0.01, o);
           }
         }
       }
@@ -704,7 +749,15 @@ export function createHouse() {
     { z: -3.6, x0: 2.3225, x1: 5.9225, sx0: 2.3425, sx1: 5.9425, yBase: groundGable },
   ]);
   // Garage door.
-  box('trim', -3.7, 1.755, 3.62, 3.35, 2.17, 0.07); // fills the opening up to the header
+  // The slab fills the opening up to the header, open behind the glazed top row.
+  const lite = [2.245, 2.635];
+  box('trim', -3.7, (0.67 + lite[0]) / 2, 3.62, 3.35, lite[0] - 0.67, 0.07);
+  box('trim', -3.7, (lite[1] + 2.84) / 2, 3.62, 3.35, 2.84 - lite[1], 0.07);
+  for (let col = 0; col <= 6; col++) {
+    const x0 = col ? -4.835 + (col - 1) * 0.55 : -5.375,
+      x1 = col < 6 ? -5.325 + col * 0.55 : -2.025;
+    box('trim', (x0 + x1) / 2, (lite[0] + lite[1]) / 2, 3.62, x1 - x0, lite[1] - lite[0], 0.07);
+  }
   for (let row = 0; row < 4; row++)
     for (let col = 0; col < 6; col++)
       box(
