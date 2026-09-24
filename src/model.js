@@ -129,6 +129,38 @@ function texture(kind) {
   t.anisotropy = 4;
   return t;
 }
+// Lap siding: 8 courses per 1.28 m tile (0.16 m exposure), pale so the material colour tints it.
+function lapTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const ctx = c.getContext('2d');
+  for (let i = 0; i < 8; i++) {
+    const g = ctx.createLinearGradient(0, i * 32, 0, i * 32 + 32);
+    g.addColorStop(0, '#d7dada');
+    g.addColorStop(0.2, '#ffffff');
+    g.addColorStop(1, '#eef0f0');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, i * 32, 256, 32);
+    ctx.fillStyle = 'rgba(35,45,45,0.55)';
+    ctx.fillRect(0, i * 32 + 30, 256, 2); // shadow under each lap
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 4;
+  return t;
+}
+// Unit box whose UVs come from map(normal, x, y, z) in metres (x, y, z local, -0.5..0.5), divided
+// by the texture's tile size, so textures keep their scale and line up across pieces.
+function uvBox(tile, map) {
+  const g = new THREE.BoxGeometry(1, 1, 1),
+    { position: p, normal: n, uv } = g.attributes;
+  for (let i = 0; i < uv.count; i++) {
+    const [u, v] = map([n.getX(i), n.getY(i), n.getZ(i)], p.getX(i), p.getY(i), p.getZ(i));
+    uv.setXY(i, u / tile, v / tile);
+  }
+  return g;
+}
 export function createHouse() {
   const house = new THREE.Group();
   house.name = 'West_Fraser_Material_House';
@@ -142,7 +174,11 @@ export function createHouse() {
       map: ['webstock', 'rim', 'walls', 'particle'].includes(p.id) ? osb : wood,
       roughness: 0.84,
     });
-  mats.context = new THREE.MeshStandardMaterial({ color: '#687c7d', roughness: 0.9 });
+  mats.siding = new THREE.MeshStandardMaterial({
+    color: '#7a8f92',
+    map: lapTexture(),
+    roughness: 0.85,
+  });
   mats.trim = new THREE.MeshStandardMaterial({ color: '#f5f2e5', roughness: 0.75 });
   mats.shingle = new THREE.MeshStandardMaterial({ color: '#414948', roughness: 1 });
   mats.base = new THREE.MeshStandardMaterial({ color: '#a7aaa1', roughness: 1 });
@@ -236,7 +272,8 @@ export function createHouse() {
     upperWall = upperFloor + 0.2325 + 0.0425;
   floor(0, -0.4, 4.4, 6.2, upperFloor); // flush with the ground-floor back wall
   // opts.out overrides which side the sheathing faces (default: away from the house centre);
-  // opts.sheathEnds = [start, end] overrides how far it runs past each end (inside corners).
+  // opts.sheathEnds / sidingEnds = [start, end] override how far sheathing / siding run past each
+  // end (inside corners); opts.siding = [from, to] is the siding's height range relative to y.
   function wall(x, z, length, y, height, axis = 'x', openings = [], cut = false, opts = {}) {
     const horizontal = (along, yy, w, h, id = 'framing', dep = 0.14) =>
       axis === 'x' ? box(id, x + along, yy, z, w, h, dep) : box(id, x, yy, z + along, dep, h, w);
@@ -321,8 +358,40 @@ export function createHouse() {
         mesh.userData.cut = cut;
       }
     }
+    // Lap siding over the sheathing, split around the openings. Courses follow world height so
+    // they line up across walls. Walls along x carry it past outside corners.
+    const onFace = (id, u, yy, w, h, n, dep, o) =>
+      axis === 'x'
+        ? box(id, x + u, yy, z + n * out, w, h, dep, o)
+        : box(id, x + n * out, yy, z + u, dep, h, w, o);
+    const [s0, s1] = opts.siding ?? [y < 1 ? -0.49 : -0.0425, height + (axis === 'z' ? 0.03 : 0)],
+      [f0, f1] = opts.sidingEnds ?? Array(2).fill(axis === 'x' ? 0.1425 : 0.1225),
+      sBreaks = [-length / 2 - f0, length / 2 + f1, ...openings.flatMap((o) => [o[0], o[1]])];
+    sBreaks.sort((a, b) => a - b);
+    for (let i = 0; i < sBreaks.length - 1; i++) {
+      const [a, b] = [sBreaks[i], sBreaks[i + 1]];
+      if (b - a < 0.01) continue;
+      const op = openings.find((o) => (a + b) / 2 > o[0] && (a + b) / 2 < o[1]);
+      for (const [lo, hi] of op
+        ? [
+            [s0, op[2]],
+            [op[3], s1],
+          ]
+        : [[s0, s1]]) {
+        if (hi - lo < 0.05) continue;
+        const bw = b - a - 0.004,
+          bh = hi - lo,
+          yc = y + (lo + hi) / 2,
+          [sx, sz] = axis === 'x' ? [bw, 0.02] : [0.02, bw];
+        const geo = uvBox(1.28, (nr, X, Y, Z) => [
+          Math.abs(nr[0]) > 0.5 ? Z * sz : X * sx,
+          Math.abs(nr[1]) > 0.5 ? Z * sz : yc + Y * bh,
+        ]);
+        onFace('siding', (a + b) / 2, yc, bw, bh, 0.1325, 0.02, { geo, cut });
+      }
+    }
   }
-  wall(-3.7, 3.5, 4.2, 0.66, 2.7, 'x', [[-1.7, 1.7, 0, 2.18]], false);
+  wall(-3.7, 3.5, 4.2, 0.66, 2.7, 'x', [[-1.7, 1.7, 0, 2.18]], false, { fit: false });
   wall(-5.8, 0, 7, 0.66, 2.7, 'z', [[-0.5, 0.7, 1.1, 2.15]]);
   wall(0, -3.5, 11.6, 0.66, 2.7, 'x', [
     [-4, -2.7, 1, 2.1],
@@ -341,6 +410,7 @@ export function createHouse() {
       [0.9, 2.1, 1, 2.1],
     ],
     true,
+    { siding: [-0.015, 2.73] },
   );
   wall(3.7, 3.5, 4.2, 0.66, 2.7, 'x', [[-1, 1, 0, 2.2]], true);
   wall(
@@ -355,12 +425,22 @@ export function createHouse() {
       [0.25, 1.25, 0.9, 2.1],
     ],
     true,
-    { sheathEnds: [-0.07, -0.07] },
+    { sheathEnds: [-0.07, -0.07], siding: [-0.025, 2.7], sidingEnds: [-0.1225, -0.1225] },
   );
   // Return walls close the recess sides; their sheathing faces the porch and starts at the recess
   // wall's sheathing face (inside corner).
-  wall(-1.6, 3.1, 0.8, 0.66, 2.7, 'z', [], false, { out: 1, sheathEnds: [-0.1225, 0.0775] });
-  wall(1.6, 3.1, 0.8, 0.66, 2.7, 'z', [], true, { out: -1, sheathEnds: [-0.1225, 0.0775] });
+  wall(-1.6, 3.1, 0.8, 0.66, 2.7, 'z', [], false, {
+    out: 1,
+    sheathEnds: [-0.1225, 0.0775],
+    siding: [-0.025, 2.7],
+    sidingEnds: [-0.1425, 0.1225],
+  });
+  wall(1.6, 3.1, 0.8, 0.66, 2.7, 'z', [], true, {
+    out: -1,
+    sheathEnds: [-0.1225, 0.0775],
+    siding: [-0.025, 2.7],
+    sidingEnds: [-0.1425, 0.1225],
+  });
   wall(
     0,
     2.7,
@@ -373,13 +453,17 @@ export function createHouse() {
       [0.45, 1.5, 0.8, 1.95],
     ],
     true,
+    { siding: [-0.035, 2.65] },
   );
-  wall(0, -3.5, 4.4, upperWall, 2.65, 'x', [[-0.65, 0.65, 0.8, 1.95]]);
+  wall(0, -3.5, 4.4, upperWall, 2.65, 'x', [[-0.65, 0.65, 0.8, 1.95]], false, {
+    siding: [-0.495, 2.65],
+  });
   wall(-2.2, -0.4, 6.2, upperWall, 2.65, 'z');
   wall(2.2, -0.4, 6.2, upperWall, 2.65, 'z', [[-1.1, 0.3, 0.8, 1.95]], true);
   // clip = { side, x, z: [zMin, zMax] }: inside that z-range the roof's `side` slope stops at x
   // (an upper storey's wall face), with part trusses; outside it the slope runs to its eave.
-  // gables = [{ z, x0, x1, yBase }]: gable-end sheathing panels in the end walls' sheathing planes.
+  // gables = [{ z, x0, x1, sx0, sx1, yBase }]: gable-end sheathing (x0..x1) in the end walls'
+  // sheathing planes, with siding (sx0..sx1) over it.
   // y is where the bottom chords bear (on the walls' double top plate).
   function roof(cx, cz, w, d, y, rise, cut = false, clip = null, gables = []) {
     const H = w / 2 + 0.22, // ridge to eave, horizontally
@@ -487,9 +571,10 @@ export function createHouse() {
       beam('trim', [left, y + 0.03, z], [cx, y + rise + 0.03, z], 0.14, 0.16, { cut });
       beam('trim', [cx, y + rise + 0.03, z], [right, y + 0.03, z], 0.14, 0.16, { cut });
     }
-    // Gable sheathing: from the wall sheathing up to the top of the end truss's chords.
+    // Gable sheathing from the wall sheathing up to the top of the end truss's chords, with siding
+    // over it (courses keyed to world height like the walls').
     const topAt = (x) => y + rise * (1 - Math.abs(x - cx) / H) + 0.05 / cosA - 0.005;
-    for (const { z, x0, x1, yBase } of gables) {
+    const gablePanel = (id, x0, x1, yBase, z, depth, o = {}) => {
       const pts = [
         [x0, yBase],
         [x1, yBase],
@@ -501,33 +586,42 @@ export function createHouse() {
         my = (yBase + Math.max(...pts.map((p) => p[1]))) / 2;
       const geo = new THREE.ExtrudeGeometry(
         new THREE.Shape(pts.map(([px, py]) => new THREE.Vector2(px - mx, py - my))),
-        { depth: 0.045, bevelEnabled: false },
+        { depth, bevelEnabled: false },
       );
-      geo.translate(0, 0, -0.0225);
-      box('walls', mx, my, z, 1, 1, 1, { geo });
+      geo.translate(0, 0, -depth / 2);
+      if (id === 'siding') {
+        const { position: p, uv } = geo.attributes;
+        for (let k = 0; k < uv.count; k++)
+          uv.setXY(k, (p.getX(k) + mx) / 1.28, (p.getY(k) + my) / 1.28);
+      }
+      box(id, mx, my, z, 1, 1, 1, { geo, ...o });
+    };
+    for (const { z, x0, x1, sx0, sx1, yBase } of gables) {
+      gablePanel('walls', x0, x1, yBase, z, 0.045);
+      gablePanel('siding', sx0, sx1, yBase, z + Math.sign(z - cz) * 0.0325, 0.02, { cut });
     }
   }
-  // The lower roofs stop at the 2nd storey's outer wall faces (the siding strips on the left)
+  // The lower roofs stop at the 2nd storey's siding faces
   // where it sits over them, and run full to their inner eaves in front of it.
-  const upperZ = [-3.5 - 0.1225, 2.7 + 0.1225];
+  const upperZ = [-3.5 - 0.1425, 2.7 + 0.1425];
   // Bottom chords bear on the walls' double top plate; gables sit in the end walls' sheathing
   // planes (z +-0.1 outside the wall lines) above the wall sheathing.
   const plateTop = (base, h) => base + h + 0.0425 + 0.05,
     groundGable = 0.66 + 2.7,
     upperGable = upperWall + 2.65;
-  roof(-3.8, 0, 4, 7, plateTop(0.66, 2.7), 1.85, false, { side: 1, x: -2.39, z: upperZ }, [
-    { z: 3.6, x0: -5.9225, x1: -1.58, yBase: groundGable },
-    { z: -3.6, x0: -5.9225, x1: -2.3225, yBase: groundGable },
+  roof(-3.8, 0, 4, 7, plateTop(0.66, 2.7), 1.85, false, { side: 1, x: -2.3425, z: upperZ }, [
+    { z: 3.6, x0: -5.9225, x1: -1.58, sx0: -5.9425, sx1: -1.58, yBase: groundGable },
+    { z: -3.6, x0: -5.9225, x1: -2.3225, sx0: -5.9425, sx1: -2.3425, yBase: groundGable },
   ]);
   roof(0, -0.4, 4.4, 6.2, plateTop(upperWall, 2.65), 1.9, true, null, [
-    { z: 2.8, x0: -2.3225, x1: 2.3225, yBase: upperGable },
-    { z: -3.6, x0: -2.3225, x1: 2.3225, yBase: upperGable },
+    { z: 2.8, x0: -2.3225, x1: 2.3225, sx0: -2.3425, sx1: 2.3425, yBase: upperGable },
+    { z: -3.6, x0: -2.3225, x1: 2.3225, sx0: -2.3425, sx1: 2.3425, yBase: upperGable },
   ]);
-  roof(3.9, 0, 3.8, 7, plateTop(0.66, 2.7), 2.15, true, { side: -1, x: 2.3225, z: upperZ }, [
-    { z: 3.6, x0: 1.78, x1: 5.9225, yBase: groundGable },
-    { z: -3.6, x0: 2.3225, x1: 5.9225, yBase: groundGable },
+  roof(3.9, 0, 3.8, 7, plateTop(0.66, 2.7), 2.15, true, { side: -1, x: 2.3425, z: upperZ }, [
+    { z: 3.6, x0: 1.78, x1: 5.9225, sx0: 1.78, sx1: 5.9425, yBase: groundGable },
+    { z: -3.6, x0: 2.3225, x1: 5.9225, sx0: 2.3425, sx1: 5.9425, yBase: groundGable },
   ]);
-  // Garage door and limited finished siding retain the reference's cutaway identity.
+  // Garage door.
   box('trim', -3.7, 1.755, 3.62, 3.35, 2.17, 0.07); // fills the opening up to the header
   for (let row = 0; row < 4; row++)
     for (let col = 0; col < 6; col++)
@@ -540,16 +634,30 @@ export function createHouse() {
         0.39,
         0.035,
       );
-  for (let yy = upperWall + 0.04; yy < upperWall + 2.58; yy += 0.16)
-    box('context', -2.356, yy, -0.4, 0.065, 0.143, 6.2);
-  for (let yy = 0.8; yy < 3.35; yy += 0.16) box('context', -5.945, yy, 0, 0.04, 0.145, 7);
+  // Corner boards at the outside corners, a little proud of the siding.
+  for (const [cx, cz, sx, sz, y0, y1, cut] of [
+    [-5.8, 3.5, -1, 1, 0.17, 3.36, false],
+    [-5.8, -3.5, -1, -1, 0.17, 3.36, false],
+    [5.8, -3.5, 1, -1, 0.17, 3.36, true],
+    [5.8, 3.5, 1, 1, 0.645, 3.36, true],
+    [-1.6, 3.5, 1, 1, 0.63, 3.36, false],
+    [1.6, 3.5, -1, 1, 0.63, 3.36, true],
+    [-2.2, 2.7, -1, 1, 4.2, upperWall + 2.65, true],
+    [2.2, 2.7, 1, 1, 4.2, upperWall + 2.65, true],
+    [2.2, -3.5, 1, -1, 4.2, upperWall + 2.65, true],
+    [-2.2, -3.5, -1, -1, 4.2, upperWall + 2.65, false],
+  ])
+    box('trim', cx + sx * 0.1075, (y0 + y1) / 2, cz + sz * 0.1075, 0.09, y1 - y0 + 0.02, 0.09, {
+      cut,
+    });
   // Front porch: a deck just below the interior floor on treated joists, skirted down to a slab,
   // with steps in line with the front door. Its shed roof hangs from a ledger on the 2nd-floor rim,
   // rests on a beam over three posts, and fits between the garage and right-wing eaves.
   const porchTop = 0.63,
     porchFront = 5.1,
-    recessFace = 2.7 + 0.1225, // recess wall sheathing
-    frontFace = 3.5 + 0.1225; // garage / right-wing front wall sheathing
+    recessFace = 2.7 + 0.1425, // recess wall siding
+    frontFace = 3.5 + 0.1425, // garage / right-wing front wall siding
+    ledgerFace = 2.8125; // porch-roof ledger on the 2nd-floor rim
   box('base', 0, 0.03, 4.4125, 3.9, 0.25, 1.325); // porch slab, continuing the house base
   for (let k = -8; k <= 8; k++) {
     const x = k * 0.2275,
@@ -568,14 +676,14 @@ export function createHouse() {
     box('deck', -0.8, (top - 0.13) / 2, 5.075 + 0.28 * (i - 0.5), 1.1, top + 0.13, 0.28);
   }
   const beamTop = 3.24,
-    slope = (3.58 - beamTop) / (4.9 - (recessFace - 0.01)),
-    rafterBottom = (z) => 3.58 - slope * (z - (recessFace - 0.01));
+    slope = (3.58 - beamTop) / (4.9 - ledgerFace),
+    rafterBottom = (z) => 3.58 - slope * (z - ledgerFace);
   for (const x of [-1.45, 0.1, 1.65])
     box('trim', x, (porchTop + beamTop - 0.24) / 2, 4.9, 0.15, beamTop - 0.24 - porchTop, 0.15);
   box('lvl', 0.1, beamTop - 0.12, 4.9, 3.3, 0.24, 0.14);
   box('framing', 0.1, 3.58, 2.775, 3.3, 0.24, 0.075); // ledger on the 2nd-floor rim
   const c = Math.cos(Math.atan(slope)),
-    z0 = recessFace - 0.01,
+    z0 = ledgerFace,
     z1 = porchFront + 0.02;
   for (const x of [-1.5, -0.7, 0.1, 0.9, 1.7])
     beam(
@@ -596,12 +704,12 @@ export function createHouse() {
       cut: true,
     });
   box('trim', 0.1, rafterBottom(z1) + 0.05, z1 + 0.0325, 3.35, 0.2, 0.025, { cut: true }); // fascia
-  for (let x = 6.02; x < 9.35; x += 0.2) box('deck', x, 0.58, 0.8, 0.188, 0.12, 8.25);
+  for (let x = 6.045; x < 9.35; x += 0.2) box('deck', x, 0.58, 0.8, 0.188, 0.12, 8.25);
   for (const z of [-3.3, 4.93]) {
     box('deck', 7.68, 0.33, z, 3.68, 0.35, 0.12);
-    for (const x of [5.98, 7.65, 9.32]) box('deck', x, 1.15, z, 0.13, 1.25, 0.13);
-    box('deck', 7.65, 1.77, z, 3.5, 0.1, 0.16);
-    box('deck', 7.65, 0.83, z, 3.5, 0.08, 0.09);
+    for (const x of [6.02, 7.65, 9.32]) box('deck', x, 1.15, z, 0.13, 1.25, 0.13);
+    box('deck', 7.68, 1.77, z, 3.44, 0.1, 0.16);
+    box('deck', 7.68, 0.83, z, 3.44, 0.08, 0.09);
     for (let x = 6.1; x < 9.3; x += 0.22) box('deck', x, 1.28, z, 0.055, 0.86, 0.055);
   }
   for (const z of [-1.25, 0.8, 2.85]) box('deck', 9.32, 1.15, z, 0.13, 1.25, 0.13);
