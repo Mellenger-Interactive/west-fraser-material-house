@@ -64,6 +64,8 @@ canvas {
   margin: 15px 0;
 }
 .intro p {
+  max-width: min(380px, calc(100vw - 48px));
+  line-height: 1.6;
   font-size: 13px;
   color: #637469;
 }

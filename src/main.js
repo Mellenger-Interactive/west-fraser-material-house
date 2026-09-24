@@ -86,8 +86,8 @@ function select(id) {
   });
   const p = products.find((p) => p.id === selected);
   $('#detail').innerHTML = p
-    ? `<span class="eyebrow">${p.type} · IN THE HOUSE</span><h3>${p.name}</h3><p>${p.desc}</p><a href="https://www.westfraser.com/products" target="_blank" rel="noopener">Explore products ↗</a><button id="clear">Show all materials</button>`
-    : `<span class="eyebrow">ONE HOUSE. MANY POSSIBILITIES.</span><h3>Every piece has a purpose.</h3><p>Play the build, pull the house apart, or select a material to see where it belongs.</p><a href="https://www.westfraser.com/products" target="_blank" rel="noopener">Meet the wood product families ↗</a>`;
+    ? `<span class="eyebrow">${p.type} · IN THE HOUSE</span><h3>${p.name}</h3><p>${p.desc}</p><a href="https://www.westfraser.com/products" target="_blank" rel="noopener">Learn More →</a><button id="clear">Show all products</button>`
+    : `<span class="eyebrow">ATTRIBUTES OF WOOD</span><h3>Carbon Storage</h3><p>Responsibly sourced wood products are grown naturally, capture carbon dioxide from the atmosphere as they grow and continue to store carbon throughout their lifetime.</p><a href="https://www.westfraser.com/products" target="_blank" rel="noopener">Explore Our Products →</a>`;
   $('#clear')?.addEventListener('click', () => select(null));
   if (p) {
     progress = 1;

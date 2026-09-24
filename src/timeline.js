@@ -20,7 +20,7 @@ export const STAGES = [
 ];
 
 /** Label once progress reaches the last band's `until`. */
-export const COMPLETE_LABEL = 'The material house';
+export const COMPLETE_LABEL = 'The finished home';
 
 export const stageLabel = (progress) =>
   STAGES.find((s) => progress < s.until)?.label ?? COMPLETE_LABEL;
