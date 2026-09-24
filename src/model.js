@@ -86,7 +86,7 @@ export const products = [
     type: 'TRIM & CABINETS',
     color: '#e8d7b3',
     stage: 0.91,
-    desc: 'Medium-density fibreboard is used for interior trim and cabinetry. Select this material to reveal the simplified cabinet and interior trim elements.',
+    desc: 'Medium-density fibreboard is used for interior trim and cabinetry. Select this material to reveal the simplified cabinets.',
   },
 ];
 function texture(kind) {
@@ -891,9 +891,6 @@ export function createHouse() {
     box('mdf', x, 1.66, -2.94, 0.65, 0.065, 0.7);
     box('trim', x + 0.17, 1.33, -2.594, 0.025, 0.16, 0.025);
   }
-  // Baseboards on the floor against the right wing's side and back walls, clear of the cabinets.
-  box('mdf', 5.7125, 0.7325, -1.315, 0.035, 0.16, 4.23);
-  box('mdf', 5.2725, 0.7325, -3.4125, 0.845, 0.16, 0.035);
   house.position.x = -1;
   return { house, parts, products, mats };
 }
