@@ -101,14 +101,7 @@ canvas {
   color: #667a6c;
   font-size: 11px;
 }
-.live-dot {
-  width: 6px;
-  height: 6px;
-  background: #197958;
-  border-radius: 50%;
-}
 .gesture {
-  margin-left: 22px;
   color: #7e8a81;
 }
 .compass {
@@ -137,10 +130,6 @@ aside {
 .aside-top .eyebrow {
   font-size: 9px;
   letter-spacing: 1.5px;
-}
-#product-counter {
-  font-size: 10px;
-  color: #87938a;
 }
 aside h2 {
   font-family: Manrope, sans-serif;

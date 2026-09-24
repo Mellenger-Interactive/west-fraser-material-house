@@ -207,7 +207,6 @@ function updateParts(dt) {
     mat.emissive.set(selection.has(product) ? '#40331b' : '#000000');
     mat.emissiveIntensity = 0.12;
   }
-  let visible = 0;
   parts.forEach((mesh, i) => {
     const data = mesh.userData,
       f = partFraction(mesh, i, progress),
@@ -227,9 +226,7 @@ function updateParts(dt) {
     mesh.position.z += explodeValue * (b[2] > 0 ? 1 : -1) * 0.8;
     mesh.scale.fromArray(data.baseScale);
     mesh.scale.multiplyScalar(Math.max(0.001, smooth));
-    if (mesh.visible) visible++;
   });
-  $('#piece-count').textContent = `${visible.toLocaleString()} individual components`;
 }
 let last = performance.now();
 function tick(now) {
