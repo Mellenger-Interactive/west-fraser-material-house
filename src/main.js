@@ -62,7 +62,9 @@ let progress = 1,
   exploded = false,
   explodeValue = 0,
   cutaway = true,
-  selected = null;
+  selected = null; // the most recent pick, shown in the detail panel
+// Products shown in isolation. Cards (and parts in the view) toggle in and out; empty shows all.
+const selection = new Set();
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const originalColors = Object.fromEntries(
   Object.entries(mats).map(([id, m]) => [id, m.color.clone()]),
@@ -73,17 +75,20 @@ $('#products').innerHTML = products
       `<button class="product" data-id="${p.id}" aria-pressed="false"><span class="swatch" style="--color:${p.color}"></span><span>${p.name}<small>${p.type}</small></span></button>`,
   )
   .join('');
+// select(id) toggles a product in or out of the selection; select(null) clears it.
 function select(id) {
-  selected = selected === id ? null : id;
+  if (id === null) selection.clear();
+  else if (!selection.delete(id)) selection.add(id);
+  selected = [...selection].at(-1) ?? null;
   document.querySelectorAll('.product').forEach((el) => {
-    el.classList.toggle('active', el.dataset.id === selected);
-    el.setAttribute('aria-pressed', el.dataset.id === selected);
+    el.classList.toggle('active', selection.has(el.dataset.id));
+    el.setAttribute('aria-pressed', selection.has(el.dataset.id));
   });
   const p = products.find((p) => p.id === selected);
   $('#detail').innerHTML = p
     ? `<span class="eyebrow">${p.type} · IN THE HOUSE</span><h3>${p.name}</h3><p>${p.desc}</p><a href="https://www.westfraser.com/products" target="_blank" rel="noopener">Explore products ↗</a><button id="clear">Show all materials</button>`
     : `<span class="eyebrow">ONE HOUSE. MANY POSSIBILITIES.</span><h3>Every piece has a purpose.</h3><p>Play the build, pull the house apart, or select a material to see where it belongs.</p><a href="https://www.westfraser.com/products" target="_blank" rel="noopener">Meet the wood product families ↗</a>`;
-  $('#clear')?.addEventListener('click', () => select(selected));
+  $('#clear')?.addEventListener('click', () => select(null));
   if (p) {
     progress = 1;
     playing = false;
@@ -105,7 +110,7 @@ function syncUI() {
 $('#play').onclick = () => {
   if (!playing) {
     if (progress >= 0.999) progress = 0;
-    if (selected) select(selected);
+    if (selection.size) select(null);
     exploded = false;
     $('#explode').setAttribute('aria-pressed', 'false');
   }
@@ -198,8 +203,8 @@ function updateParts(dt) {
   for (const [id, mat] of Object.entries(mats)) {
     const product = mat.userData.product ?? id; // OSB edge materials follow their product
     mat.color.copy(originalColors[id]);
-    if (selected && product !== selected) mat.color.lerp(new THREE.Color('#e6e9df'), 0.76);
-    mat.emissive.set(selected === product ? '#40331b' : '#000000');
+    if (selection.size && !selection.has(product)) mat.color.lerp(new THREE.Color('#e6e9df'), 0.76);
+    mat.emissive.set(selection.has(product) ? '#40331b' : '#000000');
     mat.emissiveIntensity = 0.12;
   }
   let visible = 0;
@@ -207,17 +212,12 @@ function updateParts(dt) {
     const data = mesh.userData,
       f = partFraction(mesh, i, progress),
       smooth = 1 - Math.pow(1 - f, 3);
-    const relevant = !selected || data.product === selected;
-    const cutHide = cutaway && data.cut && (!selected || data.product !== selected);
+    const picked = selection.has(data.product);
+    const cutHide = cutaway && data.cut && !picked;
     mesh.visible = f > 0 && !cutHide;
-    if (
-      selected &&
-      ['mdf', 'webstock', 'floor', 'plates', 'rim'].includes(selected) &&
-      data.product !== selected &&
-      data.product !== 'base'
-    )
-      mesh.visible = false;
-    if (FINISHES.includes(data.product) && (selected || exploded || explodeValue > 0.01))
+    // A selection shows only the selected products (on the foundation).
+    if (selection.size && !picked && data.product !== 'base') mesh.visible = false;
+    if (FINISHES.includes(data.product) && (selection.size || exploded || explodeValue > 0.01))
       mesh.visible = false;
     const b = data.basePosition;
     mesh.position.set(b[0], b[1] + (1 - smooth) * (3 + (i % 5) * 0.35), b[2]);
@@ -346,6 +346,6 @@ $('#export').onclick = async () => {
 window.houseExplorer = {
   parts: parts.length,
   products: products.length,
-  getState: () => ({ progress, playing, exploded, cutaway, selected }),
+  getState: () => ({ progress, playing, exploded, cutaway, selected, selection: [...selection] }),
   exportModel,
 };
