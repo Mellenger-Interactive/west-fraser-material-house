@@ -231,14 +231,22 @@ function looseOffset(id, p, out) {
     (p[2] > 0 ? 1 : -1) * 0.8,
   );
 }
-// Explode by assembly (products in SPREAD): touching parts of one product form an assembly. It
-// lifts like its product, slides straight out from the house along its main horizontal axis until
-// it clears every other exploded part by EXPLODE_GAP, and spreads about its centre so its parts
-// separate in proportion. Long members stretch by the same factor, so what they carry (balusters
-// on a rail, boards on joists) stays within their length.
-const SPREAD = { deck: 0.8 },
-  EXPLODE_GAP = 0.7;
-const assembly = new Map(); // mesh -> { center, move, spread, stretch: extra scale per local axis }
+// Explode by assembly (products in SPREAD, with how far their parts separate): touching parts of
+// one product form an assembly, and its parts spread about its centre in proportion. Long members
+// stretch by the same factor, so what they carry (balusters on a rail, boards on joists) stays
+// within their length. An assembly lifts like its product. If its parts rest on another product
+// (userData.above), it lifts that product's lift plus EXPLODE_GAP, or, if they also carry one
+// (userData.below), halfway between the two products' lifts. It then slides straight out from the house
+// along its main horizontal axis until it clears every other exploded part by EXPLODE_GAP.
+// RADIAL products wrap the house (plates): they spread about the house centre in plan instead,
+// without stretching or sliding, so every piece moves straight out and none moves inward. A piece
+// that would still overlap another exploded part is nudged further out (its own main horizontal
+// axis, away from the house centre) until it clears it by NUDGE_GAP.
+const SPREAD = { deck: 0.8, plates: 0.5 },
+  RADIAL = ['plates'],
+  EXPLODE_GAP = 0.7,
+  NUDGE_GAP = 0.1;
+const assembly = new Map(); // mesh -> { center, move, nudge, spread, stretch: extra scale per local axis }
 {
   const restBox = (m) => {
     m.updateMatrix();
@@ -274,19 +282,25 @@ const assembly = new Map(); // mesh -> { center, move, spread, stretch: extra sc
     for (const list of members.values()) {
       const center = new THREE.Box3();
       for (const m of list) center.union(rest.get(m));
-      const c = center.getCenter(new THREE.Vector3());
+      const c = center.getCenter(new THREE.Vector3()),
+        radial = RADIAL.includes(id);
+      if (radial) c.set(houseCenter.x, c.y, houseCenter.z);
       // The assembly's footprint once spread and stretched, lifted like its product.
-      const box = new THREE.Box3();
+      const box = new THREE.Box3(),
+        partBoxes = new Map();
       for (const m of list) {
         const r = rest.get(m),
           st = m.userData.baseScale.map((x) =>
-            x >= 3 * Math.min(...m.userData.baseScale) ? spread : 0,
+            !radial && x >= 3 * Math.min(...m.userData.baseScale) ? spread : 0,
           ),
           mid = r.getCenter(new THREE.Vector3()),
           half = r.getSize(new THREE.Vector3()).multiplyScalar(0.5);
         for (let k = 0; k < 3; k++) {
           const q = c.getComponent(k) + (mid.getComponent(k) - c.getComponent(k)) * (1 + spread);
           const h = half.getComponent(k) * (1 + st[k]);
+          if (!partBoxes.has(m)) partBoxes.set(m, new THREE.Box3());
+          partBoxes.get(m).min.setComponent(k, q - h);
+          partBoxes.get(m).max.setComponent(k, q + h);
           box.min.setComponent(
             k,
             Math.min(box.isEmpty() ? Infinity : box.min.getComponent(k), q - h),
@@ -298,15 +312,22 @@ const assembly = new Map(); // mesh -> { center, move, spread, stretch: extra sc
         }
         m.userData.stretch = st;
       }
-      const lift = looseOffset(id, c.toArray(), v).y;
-      box.translate(v.set(0, lift, 0));
+      const { above, below } = list.find((m) => m.userData.above)?.userData ?? {},
+        liftOf = (product) => looseOffset(product, c.toArray(), v).y,
+        lift = below
+          ? (liftOf(above) + liftOf(below)) / 2
+          : above
+            ? liftOf(above) + EXPLODE_GAP
+            : liftOf(id),
+        move = new THREE.Vector3(0, lift, 0);
+      box.translate(move);
       const dx = c.x - houseCenter.x,
         dz = c.z - houseCenter.z,
         ax = Math.abs(dx) >= Math.abs(dz) ? 0 : 2,
         side = 2 - ax,
         sign = Math.sign(ax ? dz : dx) || 1;
       let t = 0;
-      for (const o of others) {
+      for (const o of radial ? [] : others) {
         if (o.max.y <= box.min.y || o.min.y >= box.max.y) continue;
         if (o.max.getComponent(side) <= box.min.getComponent(side)) continue;
         if (o.min.getComponent(side) >= box.max.getComponent(side)) continue;
@@ -316,9 +337,34 @@ const assembly = new Map(); // mesh -> { center, move, spread, stretch: extra sc
             : box.max.getComponent(ax) - o.min.getComponent(ax);
         t = Math.max(t, need);
       }
-      const move = new THREE.Vector3(0, lift, 0).setComponent(ax, sign * (t + EXPLODE_GAP));
+      if (!radial) move.setComponent(ax, sign * (t + EXPLODE_GAP));
       for (const m of list) {
-        assembly.set(m, { center: c.toArray(), move, spread, stretch: m.userData.stretch });
+        const nudge = new THREE.Vector3();
+        if (radial) {
+          const b = partBoxes.get(m).translate(move),
+            mid = b.getCenter(new THREE.Vector3()),
+            px = mid.x - houseCenter.x,
+            pz = mid.z - houseCenter.z,
+            k = Math.abs(px) >= Math.abs(pz) ? 0 : 2,
+            dir = Math.sign(k ? pz : px) || 1;
+          for (let pass = 0; pass < 6; pass++) {
+            let need = 0;
+            const probe = b.clone().expandByScalar(-0.005);
+            for (const o of others)
+              if (o.intersectsBox(probe))
+                need = Math.max(
+                  need,
+                  dir > 0
+                    ? o.max.getComponent(k) - b.min.getComponent(k)
+                    : b.max.getComponent(k) - o.min.getComponent(k),
+                );
+            if (!need) break;
+            v.set(0, 0, 0).setComponent(k, dir * (need + NUDGE_GAP));
+            b.translate(v);
+            nudge.add(v);
+          }
+        }
+        assembly.set(m, { center: c.toArray(), move, nudge, spread, stretch: m.userData.stretch });
         delete m.userData.stretch;
       }
     }
@@ -351,6 +397,7 @@ function updateParts(dt) {
     mesh.position.set(b[0], b[1] + (1 - smooth) * (3 + (i % 5) * 0.35), b[2]);
     const a = assembly.get(mesh);
     mesh.position.addScaledVector(a ? a.move : looseOffset(data.product, b, offset), explodeValue);
+    if (a) mesh.position.addScaledVector(a.nudge, explodeValue);
     mesh.scale.fromArray(data.baseScale);
     if (a)
       for (let k = 0; k < 3; k++) {

@@ -352,8 +352,10 @@ export function createHouse() {
   // opts.sheathEnds / sidingEnds = [start, end] override how far sheathing / siding run past each
   // end (inside corners); opts.siding = [from, to] is the siding's height range relative to y.
   function wall(x, z, length, y, height, axis = 'x', openings = [], cut = false, opts = {}) {
-    const horizontal = (along, yy, w, h, id = 'framing', dep = 0.14) =>
-      axis === 'x' ? box(id, x + along, yy, z, w, h, dep) : box(id, x, yy, z + along, dep, h, w);
+    const horizontal = (along, yy, w, h, id = 'framing', dep = 0.14, o) =>
+      axis === 'x'
+        ? box(id, x + along, yy, z, w, h, dep, o)
+        : box(id, x, yy, z + along, dep, h, w, o);
     // Framing butts rather than overlaps. Walls along z sit between walls along x, so x-wall
     // framing runs half a stud depth past each end and z-wall framing stops half a depth short.
     const SW = 0.075, // stud width
@@ -362,14 +364,17 @@ export function createHouse() {
       bottom = y + PT / 2, // top of the bottom plate
       top = y + height - PT * 1.5; // underside of the double top plate
     const stud = (u, from, to) => to - from > 0.02 && horizontal(u, (from + to) / 2, SW, to - from);
-    // Bottom plate stops at door openings; double top plate runs through.
+    // Bottom plate stops at door openings; double top plate runs through. When exploded, the bottom
+    // plate sits between the floor under it and the studs, and the top plate above the studs.
+    const onFloor = { above: 'floor', below: 'framing' };
     let from = -end;
     for (const o of openings.filter((o) => o[2] <= 0.12).sort((a, b) => a[0] - b[0])) {
-      horizontal((from + o[0]) / 2, y, o[0] - from, PT, 'plates');
+      horizontal((from + o[0]) / 2, y, o[0] - from, PT, 'plates', 0.14, onFloor);
       from = o[1];
     }
-    horizontal((from + end) / 2, y, end - from, PT, 'plates');
-    for (const yy of [y + height - PT, y + height]) horizontal(0, yy, end * 2, PT, 'plates');
+    horizontal((from + end) / 2, y, end - from, PT, 'plates', 0.14, onFloor);
+    for (const yy of [y + height - PT, y + height])
+      horizontal(0, yy, end * 2, PT, 'plates', 0.14, { above: 'framing' });
     // Common studs on a 0.4 grid plus an end stud each side; skip any that clash with a
     // king/jack pair, and keep only cripples that fit fully inside an opening.
     const clashes = (u) =>
