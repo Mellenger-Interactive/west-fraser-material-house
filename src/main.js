@@ -236,17 +236,19 @@ function looseOffset(id, p, out) {
 // stretch by the same factor, so what they carry (balusters on a rail, boards on joists) stays
 // within their length. An assembly lifts like its product. If its parts rest on another product
 // (userData.above), it lifts that product's lift plus EXPLODE_GAP, or, if they also carry one
-// (userData.below), halfway between the two products' lifts. It then slides straight out from the house
-// along its main horizontal axis until it clears every other exploded part by EXPLODE_GAP.
-// RADIAL products wrap the house (plates): they spread about the house centre in plan instead,
-// without stretching or sliding, so every piece moves straight out and none moves inward. A piece
-// that would still overlap another exploded part is nudged further out (its own main horizontal
-// axis, away from the house centre) until it clears it by NUDGE_GAP.
-const SPREAD = { deck: 0.8, plates: 0.5 },
-  RADIAL = ['plates'],
+// (userData.below), halfway between the two products' lifts. It then slides straight out from the
+// house along its main horizontal axis until it clears every other exploded part by EXPLODE_GAP.
+// RADIAL products wrap or span the house (plates, joist webs): they spread about the house centre
+// in plan instead, without stretching or sliding, so every piece moves straight out and none moves
+// inward. A piece that would still overlap another exploded part is nudged further out (its own
+// main horizontal axis, away from the house centre) until it clears it by NUDGE_GAP. Products are
+// placed in SPREAD order, each clearing the final positions of those before it.
+const SPREAD = { deck: 0.8, plates: 0.5, webstock: 0.5 },
+  RADIAL = ['plates', 'webstock'],
   EXPLODE_GAP = 0.7,
   NUDGE_GAP = 0.1;
-const assembly = new Map(); // mesh -> { center, move, nudge, spread, stretch: extra scale per local axis }
+// mesh -> { center, move, nudge, final: exploded box, spread, stretch: extra scale per local axis }
+const assembly = new Map();
 {
   const restBox = (m) => {
     m.updateMatrix();
@@ -274,10 +276,12 @@ const assembly = new Map(); // mesh -> { center, move, nudge, spread, stretch: e
       .filter((m) => m.userData.product !== id && !FINISHES.includes(m.userData.product))
       .map((m) => {
         const a = assembly.get(m);
-        return rest
-          .get(m)
-          .clone()
-          .translate(a ? a.move : looseOffset(m.userData.product, m.userData.basePosition, v));
+        return a
+          ? a.final
+          : rest
+              .get(m)
+              .clone()
+              .translate(looseOffset(m.userData.product, m.userData.basePosition, v));
       });
     for (const list of members.values()) {
       const center = new THREE.Box3();
@@ -339,10 +343,10 @@ const assembly = new Map(); // mesh -> { center, move, nudge, spread, stretch: e
       }
       if (!radial) move.setComponent(ax, sign * (t + EXPLODE_GAP));
       for (const m of list) {
-        const nudge = new THREE.Vector3();
+        const nudge = new THREE.Vector3(),
+          b = partBoxes.get(m).translate(move); // becomes the part's final exploded box
         if (radial) {
-          const b = partBoxes.get(m).translate(move),
-            mid = b.getCenter(new THREE.Vector3()),
+          const mid = b.getCenter(new THREE.Vector3()),
             px = mid.x - houseCenter.x,
             pz = mid.z - houseCenter.z,
             k = Math.abs(px) >= Math.abs(pz) ? 0 : 2,
@@ -364,7 +368,14 @@ const assembly = new Map(); // mesh -> { center, move, nudge, spread, stretch: e
             nudge.add(v);
           }
         }
-        assembly.set(m, { center: c.toArray(), move, nudge, spread, stretch: m.userData.stretch });
+        assembly.set(m, {
+          center: c.toArray(),
+          move,
+          nudge,
+          final: b,
+          spread,
+          stretch: m.userData.stretch,
+        });
         delete m.userData.stretch;
       }
     }
