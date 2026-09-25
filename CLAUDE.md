@@ -101,7 +101,7 @@ Model conventions: units are roughly metres, y is up, and the whole house is shi
 
 ## Gotchas: values that must stay in sync
 
-- **Stage timing lives in two places.** Each product's `stage` fraction is in `model.js`. Everything else is in `STAGES` in `src/timeline.js`: the label thresholds (`until`: `.08 / .32 / .58 / .82 / .99`) and the timeline button stops (`stop`: `0 / 25 / 49 / 75 / 100`). Keep product stages inside the band their label describes.
+- **Stage timing lives in two places.** Each product's `stage` fraction is in `model.js`. Everything else is in `STAGES` in `src/timeline.js`: the label thresholds (`until`: `.08 / .32 / .58 / .82 / .99`) and the timeline button stops (`stop`: `0 / 25 / 49 / 75 / 100`). Keep product stages inside the band their label describes. Exception: `mdf` (0.4) lands right after the sub-floor, inside the Framing band (Sasha, round 3); its cabinet pulls (`trim`) take the same stage.
 - **Build duration:** `BUILD_SECONDS` (10) and `CLIP_SECONDS` (12) in `src/timeline.js`, read by `tick()` and `exportModel()`. Per-part timing is `PART_RAMP` (0.07) and `PART_STAGGER` (0.0035 × `i % 17`), shared by `partFraction()` and `exportModel()`; together they make each product overlap the next one's start. Keep the latest part's end (0.92 + 16 × stagger + ramp, × BUILD_SECONDS) under `CLIP_SECONDS`.
 - **Non-product parts** (`siding`, `trim`, `shingle`, `glass`) default to stage `.92`, and `base` defaults to `0`. They aren't selectable and don't appear in the sidebar.
 - **Product array order matters.** It sets the sidebar card order and the explode offsets (`level` in `updateParts()` is the product's index). Reordering products changes how the house pulls apart.

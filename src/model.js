@@ -85,7 +85,7 @@ export const products = [
     name: 'MDF',
     type: 'TRIM & CABINETS',
     color: '#e8d7b3',
-    stage: 0.91,
+    stage: 0.4, // right after the sub-floor lands (floor parts end at about 0.40)
     desc: 'Medium-density fibreboard is used for interior trim and cabinetry. Select this material to reveal the simplified cabinets.',
   },
 ];
@@ -892,11 +892,12 @@ export function createHouse() {
   // Interior MDF cabinets (carcass, front, top) and pulls; structural products stay independent.
   // An island about 1 m behind the right wing's front wall, doors facing its framed opening
   // (as in the reference).
+  const mdfStage = products.find((p) => p.id === 'mdf').stage;
   for (let x = 2.6; x < 5.1; x += 0.65) {
     box('mdf', x, 1.15, 2.05, 0.6, 0.94, 0.6);
     box('mdf', x, 1.16, 2.37, 0.56, 0.85, 0.04);
     box('mdf', x, 1.66, 2.06, 0.65, 0.065, 0.7);
-    box('trim', x + 0.17, 1.33, 2.406, 0.025, 0.16, 0.025);
+    box('trim', x + 0.17, 1.33, 2.406, 0.025, 0.16, 0.025, { stage: mdfStage }); // pulls arrive with the cabinets
   }
   house.position.x = -1;
   return { house, parts, products, mats };
