@@ -6,7 +6,7 @@ export const products = [
     type: 'LUMBER',
     color: '#ba9360',
     stage: 0.08,
-    desc: 'Horizontal lumber plates connect wall studs to the floor and tie the tops of framed walls together.',
+    desc: "Horizontal lumber plates tie wall studs to the floor and the tops of framed walls together. West Fraser's softwood lumber is valued for its strength, durability and renewable nature.",
   },
   {
     id: 'webstock',
@@ -22,7 +22,7 @@ export const products = [
     type: 'OSB',
     color: '#b68b4d',
     stage: 0.2,
-    desc: 'Rimboard closes the perimeter of the floor system, connecting the ends of the joists around the building.',
+    desc: 'Rimboard is a precision-engineered OSB product for use as a perimeter board for floor and roof joists in residential and light commercial construction.',
   },
   {
     id: 'floor',
@@ -30,7 +30,7 @@ export const products = [
     type: 'OSB / PLYWOOD',
     color: '#dac397',
     stage: 0.27,
-    desc: 'Structural panels create a continuous floor surface over the joists. Select OSB or plywood products according to the application.',
+    desc: "OSB and plywood panels form a continuous floor over the joists. West Fraser's OSB is a strong, durable option for residential and commercial construction.",
   },
   {
     id: 'framing',
@@ -38,7 +38,7 @@ export const products = [
     type: 'LUMBER',
     color: '#ddba81',
     stage: 0.37,
-    desc: 'Individual studs, beams and framing members form the skeleton of the house. Explore the cutaway to see the structure behind the walls.',
+    desc: 'Studs, joists and framing members form the skeleton of the house. Softwood lumber is an essential component in structural framework.',
   },
   {
     id: 'lvl',
@@ -46,7 +46,7 @@ export const products = [
     type: 'LVL',
     color: '#bd9053',
     stage: 0.45,
-    desc: 'Laminated veneer lumber headers span openings such as doors and garage entrances, transferring loads to the framing on either side.',
+    desc: 'LVL headers span openings such as doors and the garage entrance. LVL beams and headers support heavier loads and span greater distances than dimensional lumber.',
   },
   {
     id: 'trusses',
@@ -54,7 +54,7 @@ export const products = [
     type: 'FRAMING LUMBER',
     color: '#e7c992',
     stage: 0.53,
-    desc: 'Triangulated lumber members form the roof structure and support the roof sheathing. Shown as a conceptual framing arrangement.',
+    desc: "Triangulated lumber members form the roof structure and support the roof sheathing. West Fraser's softwood lumber is used in structural framework and trusses.",
   },
   {
     id: 'walls',
@@ -62,7 +62,7 @@ export const products = [
     type: 'OSB / PLYWOOD',
     color: '#c5a36a',
     stage: 0.65,
-    desc: 'Structural sheathing panels cover the wall frame. The open portions of this house reveal how panels and lumber fit together.',
+    desc: 'OSB and plywood panels sheath the wall frame, adding resistance to wind and earthquake loads and forming an integral part of the building envelope.',
   },
   {
     id: 'roof',
@@ -70,7 +70,7 @@ export const products = [
     type: 'OSB / PLYWOOD',
     color: '#e5cfa4',
     stage: 0.74,
-    desc: 'Panels span the roof framing to create a continuous deck beneath the roof covering.',
+    desc: 'OSB and plywood panels span the roof trusses to create a continuous deck beneath the shingles and form part of the building envelope.',
   },
   {
     id: 'deck',
@@ -78,7 +78,7 @@ export const products = [
     type: 'TREATED LUMBER',
     color: '#ad8758',
     stage: 0.83,
-    desc: 'Individual boards form the outdoor deck and front porch. The supplied reference identifies treated lumber; treatment and availability should be confirmed for the intended market.',
+    desc: 'Pressure-treated lumber forms the outdoor deck and front porch, and is well suited to decks, railings, steps and other outdoor living spaces.',
   },
   {
     id: 'mdf',
@@ -86,7 +86,7 @@ export const products = [
     type: 'TRIM & CABINETS',
     color: '#e8d7b3',
     stage: 0.4, // right after the sub-floor lands (floor parts end at about 0.40)
-    desc: 'Medium-density fibreboard is used for interior trim and cabinetry. Select this material to reveal the simplified cabinets.',
+    desc: 'MDF is an engineered wood panel used to create smooth, durable products like cabinets, furniture, shelving and interior mouldings. Here it forms the kitchen cabinets.',
   },
 ];
 function texture(kind) {
