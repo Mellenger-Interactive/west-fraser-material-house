@@ -221,6 +221,110 @@ function partFraction(mesh, i, t) {
 // Exterior finishes (not West Fraser products) step aside in cutaway (wood only), explode view
 // and while a material is selected, so only the wood shows. Cutaway off is the finished house.
 const FINISHES = ['siding', 'shingle', 'trim', 'glass'];
+// Explode offset of a loose part (products not in SPREAD): sides split at x 0.5 and z 0, and each
+// product lifts one level higher than the one before.
+function looseOffset(id, p, out) {
+  const level = products.findIndex((q) => q.id === id);
+  return out.set(
+    (p[0] > 0.5 ? 1 : -1) * (level >= 0 ? 0.2 + level * 0.1 : 0),
+    level >= 0 ? level * 0.32 : 0,
+    (p[2] > 0 ? 1 : -1) * 0.8,
+  );
+}
+// Explode by assembly (products in SPREAD): touching parts of one product form an assembly. It
+// lifts like its product, slides straight out from the house along its main horizontal axis until
+// it clears every other exploded part by EXPLODE_GAP, and spreads about its centre so its parts
+// separate in proportion. Long members stretch by the same factor, so what they carry (balusters
+// on a rail, boards on joists) stays within their length.
+const SPREAD = { deck: 0.8 },
+  EXPLODE_GAP = 0.7;
+const assembly = new Map(); // mesh -> { center, move, spread, stretch: extra scale per local axis }
+{
+  const restBox = (m) => {
+    m.updateMatrix();
+    if (!m.geometry.boundingBox) m.geometry.computeBoundingBox();
+    return m.geometry.boundingBox.clone().applyMatrix4(m.matrix);
+  };
+  const rest = new Map(parts.map((m) => [m, restBox(m)]));
+  const houseBox = new THREE.Box3();
+  for (const m of parts)
+    if (products.some((q) => q.id === m.userData.product)) houseBox.union(rest.get(m));
+  const houseCenter = houseBox.getCenter(new THREE.Vector3()),
+    v = new THREE.Vector3();
+  for (const [id, spread] of Object.entries(SPREAD)) {
+    const group = parts.filter((m) => m.userData.product === id);
+    const boxes = group.map((m) => rest.get(m).clone().expandByScalar(0.01));
+    const root = group.map((_, i) => i),
+      find = (i) => (root[i] === i ? i : (root[i] = find(root[i])));
+    for (let i = 0; i < group.length; i++)
+      for (let j = i + 1; j < group.length; j++)
+        if (boxes[i].intersectsBox(boxes[j])) root[find(i)] = find(j);
+    const members = new Map();
+    group.forEach((m, i) => members.set(find(i), [...(members.get(find(i)) ?? []), m]));
+    // Everything else where it sits when exploded (finishes are hidden then).
+    const others = parts
+      .filter((m) => m.userData.product !== id && !FINISHES.includes(m.userData.product))
+      .map((m) => {
+        const a = assembly.get(m);
+        return rest
+          .get(m)
+          .clone()
+          .translate(a ? a.move : looseOffset(m.userData.product, m.userData.basePosition, v));
+      });
+    for (const list of members.values()) {
+      const center = new THREE.Box3();
+      for (const m of list) center.union(rest.get(m));
+      const c = center.getCenter(new THREE.Vector3());
+      // The assembly's footprint once spread and stretched, lifted like its product.
+      const box = new THREE.Box3();
+      for (const m of list) {
+        const r = rest.get(m),
+          st = m.userData.baseScale.map((x) =>
+            x >= 3 * Math.min(...m.userData.baseScale) ? spread : 0,
+          ),
+          mid = r.getCenter(new THREE.Vector3()),
+          half = r.getSize(new THREE.Vector3()).multiplyScalar(0.5);
+        for (let k = 0; k < 3; k++) {
+          const q = c.getComponent(k) + (mid.getComponent(k) - c.getComponent(k)) * (1 + spread);
+          const h = half.getComponent(k) * (1 + st[k]);
+          box.min.setComponent(
+            k,
+            Math.min(box.isEmpty() ? Infinity : box.min.getComponent(k), q - h),
+          );
+          box.max.setComponent(
+            k,
+            Math.max(box.isEmpty() ? -Infinity : box.max.getComponent(k), q + h),
+          );
+        }
+        m.userData.stretch = st;
+      }
+      const lift = looseOffset(id, c.toArray(), v).y;
+      box.translate(v.set(0, lift, 0));
+      const dx = c.x - houseCenter.x,
+        dz = c.z - houseCenter.z,
+        ax = Math.abs(dx) >= Math.abs(dz) ? 0 : 2,
+        side = 2 - ax,
+        sign = Math.sign(ax ? dz : dx) || 1;
+      let t = 0;
+      for (const o of others) {
+        if (o.max.y <= box.min.y || o.min.y >= box.max.y) continue;
+        if (o.max.getComponent(side) <= box.min.getComponent(side)) continue;
+        if (o.min.getComponent(side) >= box.max.getComponent(side)) continue;
+        const need =
+          sign > 0
+            ? o.max.getComponent(ax) - box.min.getComponent(ax)
+            : box.max.getComponent(ax) - o.min.getComponent(ax);
+        t = Math.max(t, need);
+      }
+      const move = new THREE.Vector3(0, lift, 0).setComponent(ax, sign * (t + EXPLODE_GAP));
+      for (const m of list) {
+        assembly.set(m, { center: c.toArray(), move, spread, stretch: m.userData.stretch });
+        delete m.userData.stretch;
+      }
+    }
+  }
+}
+const offset = new THREE.Vector3();
 function updateParts(dt) {
   explodeValue = THREE.MathUtils.damp(explodeValue, exploded ? 1 : 0, reduced ? 100 : 5, dt);
   for (const [id, mat] of Object.entries(mats)) {
@@ -245,11 +349,15 @@ function updateParts(dt) {
       mesh.visible = false;
     const b = data.basePosition;
     mesh.position.set(b[0], b[1] + (1 - smooth) * (3 + (i % 5) * 0.35), b[2]);
-    const level = products.findIndex((p) => p.id === data.product);
-    mesh.position.x += explodeValue * (b[0] > 0.5 ? 1 : -1) * (level >= 0 ? 0.2 + level * 0.1 : 0);
-    mesh.position.y += explodeValue * (level >= 0 ? level * 0.32 : 0);
-    mesh.position.z += explodeValue * (b[2] > 0 ? 1 : -1) * 0.8;
+    const a = assembly.get(mesh);
+    mesh.position.addScaledVector(a ? a.move : looseOffset(data.product, b, offset), explodeValue);
     mesh.scale.fromArray(data.baseScale);
+    if (a)
+      for (let k = 0; k < 3; k++) {
+        const v = mesh.position.getComponent(k) + explodeValue * a.spread * (b[k] - a.center[k]);
+        mesh.position.setComponent(k, v);
+        mesh.scale.setComponent(k, mesh.scale.getComponent(k) * (1 + explodeValue * a.stretch[k]));
+      }
     mesh.scale.multiplyScalar(Math.max(0.001, smooth));
   });
 }
