@@ -71,7 +71,7 @@ let progress = 1,
   playing = false,
   exploded = false,
   explodeValue = 0,
-  cutaway = true,
+  cutaway = false,
   selected = null; // the most recent pick, shown in the detail panel
 // Products shown in isolation. Cards (and parts in the view) toggle in and out; empty shows all.
 const selection = new Set();
