@@ -240,7 +240,7 @@ function looseOffset(id, p, out) {
 //   rail, boards on joists) stays within their length, and the assembly slides straight out from
 //   the house along its main horizontal axis until it clears every other exploded part by
 //   EXPLODE_GAP.
-// - in place (plates, webstock): no stretch or slide. If any part would still overlap another
+// - in place (plates, webstock, rim): no stretch or slide. If any part would still overlap another
 //   exploded part, the whole assembly spreads further (up to MAX_SPREAD), or else lifts, until
 //   it clears, so its pieces never separate from each other.
 // Products are placed in SPREAD order, each clearing the final boxes of those before it.
@@ -248,6 +248,7 @@ const SPREAD = {
     deck: { spread: 0.8, slide: true },
     plates: { spread: 0.5, join: [4, 0.01, 4] }, // one assembly per plate course
     webstock: { spread: 0.5, join: [0.5, 0.01, 0.5] }, // one assembly per floor
+    rim: { spread: 0.5, join: [4, 0.01, 4] }, // one assembly per floor
   },
   EXPLODE_GAP = 0.7,
   MAX_SPREAD = 2;
