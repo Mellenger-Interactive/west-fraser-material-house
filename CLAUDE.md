@@ -91,7 +91,7 @@ Page hooks for ad-hoc scripting:
 | `src/timeline.js` | Timeline config: `BUILD_SECONDS` (10), `CLIP_SECONDS` (12), `PART_RAMP`, `PART_STAGGER`, `STAGES` (`{until, label, button, stop}` per stage), `COMPLETE_LABEL`, and `stageLabel(progress)`. |
 | `src/main.js` | Renderer and lights, camera with `reset()`, OrbitControls limits, ground and grid, the product list with `select()`, and `syncUI()` for the stage label (`stageLabel()`) and percentage. Renders the footer timeline buttons from `STAGES`. Also play/scrub/explode/cutaway handlers, raycast hover and select, `resize()` (FOV plus the `VIEW_DROP` lens shift via `setViewOffset`), `partFraction()` and `updateParts()` for the build animation, explode, and selection dimming, `tick()`, `exportModel()` for the GLB with its animation clip (no in-page download button; scripts call it through the hook), and the `window.houseExplorer` hook. |
 | `index.html` | Static markup: official West Fraser favicon links (files in `public/`), no header, intro copy, view buttons, sidebar shell, and footer shell. `.timeline-labels` is empty; `main.js` fills it from `STAGES`. |
-| `src/style.css` | All UI styling. Google Fonts: DM Sans and Manrope. |
+| `src/style.css` | All UI styling, following the West Fraser theme (Open Sans from Google Fonts; brand tokens in the project doc `claude/brand-reference.md`). |
 | `reference/WF Demo House - with deck 2026-labels.png.webp` | The client's reference illustration, with 11 labelled applications. |
 | `public/west-fraser-material-house.glb` | Exported deliverable. Regenerate only at handoffs (below). |
 | `checks/` | `verify.mjs` plus its screenshots, and `snap.mjs` for the standard shot set (output in the gitignored `checks/snaps/`). |

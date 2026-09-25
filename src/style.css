@@ -1,6 +1,6 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;450;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,400;0,600;0,700;1,400;1,600;1,700&display=swap');
 :root {
-  font-family: 'DM Sans', sans-serif;
+  font-family: 'Open Sans', sans-serif;
   color: #333333;
   background: #f7f7f7;
   font-synthesis: none;
@@ -57,11 +57,9 @@ canvas {
   letter-spacing: 2px;
 }
 .intro h1 {
-  font-family: Manrope, sans-serif;
-  font-weight: 500;
+  font-weight: 600;
   font-size: clamp(28px, 3.1vw, 48px);
-  line-height: 1.15;
-  letter-spacing: -2px;
+  line-height: 1.2;
   margin: 15px 0;
 }
 .intro p {
@@ -135,11 +133,9 @@ aside {
   letter-spacing: 1.5px;
 }
 aside h2 {
-  font-family: Manrope, sans-serif;
   font-size: 27px;
-  line-height: 1.22;
-  letter-spacing: -1px;
-  font-weight: 500;
+  line-height: 1.2;
+  font-weight: 600;
   margin: 20px 0 10px;
 }
 .aside-description {
@@ -200,11 +196,10 @@ aside h2 {
   font-size: 9px;
 }
 #detail h3 {
-  font-family: Manrope, sans-serif;
   margin: 9px 0;
   font-size: 21px;
-  font-weight: 500;
-  letter-spacing: -0.5px;
+  font-weight: 600;
+  line-height: 1.2;
 }
 #detail p {
   font-size: 12px;
@@ -245,9 +240,8 @@ footer {
   margin-bottom: 8px;
 }
 .build-label strong {
-  font-family: Manrope, sans-serif;
   font-size: 16px;
-  font-weight: 500;
+  font-weight: 600;
 }
 .play-button {
   width: 45px;
@@ -280,7 +274,7 @@ input[type='range'] {
   font-size: 10px;
 }
 #percent {
-  font-family: Manrope, sans-serif;
+  font-weight: 600;
   font-size: 30px;
   width: 72px;
   text-align: right;
