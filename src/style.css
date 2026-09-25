@@ -125,7 +125,7 @@ canvas {
 aside {
   background: #fff;
   border-left: 1px solid #e6e6e6;
-  padding: 28px 25px;
+  padding: 24px;
   overflow: auto;
 }
 .aside-top {
@@ -134,16 +134,16 @@ aside {
   align-items: center;
 }
 aside h2 {
-  font-size: 27px;
+  font-size: 24px;
   line-height: 1.2;
   font-weight: 600;
-  margin: 20px 0 10px;
+  margin: 8px 0;
 }
 .aside-description {
   font-size: 14px;
   color: #595959;
   line-height: 1.5;
-  margin-bottom: 22px;
+  margin: 0 0 16px;
 }
 #products {
   display: grid;
@@ -189,13 +189,13 @@ aside h2 {
   margin-top: 3px;
 }
 #detail {
-  margin-top: 20px;
+  margin-top: 16px;
   border-top: 1px solid #e6e6e6;
-  padding-top: 17px;
+  padding-top: 16px;
 }
 #detail h3 {
-  margin: 9px 0;
-  font-size: 21px;
+  margin: 8px 0;
+  font-size: 20px;
   font-weight: 600;
   line-height: 1.2;
 }
@@ -203,7 +203,7 @@ aside h2 {
   font-size: 14px;
   line-height: 1.5;
   color: #595959;
-  margin: 7px 0 12px;
+  margin: 6px 0 8px;
 }
 #detail a {
   font-size: 14px;
@@ -312,10 +312,10 @@ input[type='range'] {
     grid-template-columns: minmax(0, 1fr) 400px;
   }
   aside {
-    padding: 36px;
+    padding: 32px;
   }
   .product {
-    min-height: 57px;
+    min-height: 54px;
     font-size: 14px;
   }
   #detail p,
@@ -344,6 +344,12 @@ input[type='range'] {
   }
   .build-label {
     width: 155px;
+  }
+  aside {
+    padding: 20px;
+  }
+  aside h2 {
+    font-size: 20px;
   }
   .source-note {
     padding: 12px 22px;
