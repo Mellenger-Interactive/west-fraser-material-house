@@ -110,18 +110,6 @@ canvas {
 .gesture {
   color: #595959;
 }
-.compass {
-  position: absolute;
-  right: 30px;
-  bottom: 26px;
-  font-size: 12px;
-  display: grid;
-  justify-items: center;
-  gap: 3px;
-}
-.compass span {
-  font-size: 30px;
-}
 aside {
   background: #fff;
   border-left: 1px solid #e6e6e6;
@@ -429,8 +417,5 @@ input[type='range'] {
   }
   .intro p {
     margin-top: 9px;
-  }
-  .compass {
-    display: none;
   }
 }
