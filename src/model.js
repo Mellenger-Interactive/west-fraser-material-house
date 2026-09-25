@@ -309,9 +309,17 @@ export function createHouse() {
       if (notch && [notch[0], notch[1]].some((e) => Math.abs(xx - e) < 0.065 + 0.0375)) continue;
       const z0 = z - d / 2 + 0.0375,
         z1 = inNotch(xx, z + d / 2) ? notch[2] - 0.0375 : z + d / 2 - 0.0375;
+      // I-joist: OSB web between lumber flanges. Exploded, each floor stacks bottom flange, web,
+      // top flange, subfloor (see SPREAD in main.js).
       box('webstock', xx, y, (z0 + z1) / 2, 0.06, 0.25, z1 - z0);
-      box('framing', xx, y + 0.15, (z0 + z1) / 2, 0.13, 0.055, z1 - z0);
-      box('framing', xx, y - 0.15, (z0 + z1) / 2, 0.13, 0.055, z1 - z0);
+      box('framing', xx, y + 0.15, (z0 + z1) / 2, 0.13, 0.055, z1 - z0, {
+        above: 'webstock',
+        below: 'floor',
+      });
+      box('framing', xx, y - 0.15, (z0 + z1) / 2, 0.13, 0.055, z1 - z0, {
+        above: 'base',
+        below: 'webstock',
+      });
     }
     const rimX = (a, b, zz) => box('rim', (a + b) / 2, y, zz, b - a, 0.355, 0.075),
       rimZ = (xx, a, b) => box('rim', xx, y, (a + b) / 2, 0.075, 0.355, b - a),
@@ -347,7 +355,14 @@ export function createHouse() {
   // (wall base 0.66 + 2.7 + half a plate), and its walls stand on its subfloor.
   const upperFloor = 0.66 + 2.7 + 0.0425 + 0.1775,
     upperWall = upperFloor + 0.2325 + 0.0425;
-  floor(0, -0.4, 4.4, 6.2, upperFloor); // flush with the ground-floor back wall
+  // 2nd-storey parts (its floor, walls and roof) carry userData.storey = 1, so they explode one
+  // storey higher (see SPREAD in main.js).
+  const storey2 = (build) => {
+    const from = parts.length;
+    build();
+    for (let i = from; i < parts.length; i++) parts[i].userData.storey = 1;
+  };
+  storey2(() => floor(0, -0.4, 4.4, 6.2, upperFloor)); // flush with the ground-floor back wall
   // opts.out overrides which side the sheathing faces (default: away from the house centre);
   // opts.sheathEnds / sidingEnds = [start, end] override how far sheathing / siding run past each
   // end (inside corners); opts.siding = [from, to] is the siding's height range relative to y.
@@ -579,25 +594,27 @@ export function createHouse() {
     siding: [-0.025, 2.7],
     sidingEnds: [-0.1425, 0.1225],
   });
-  wall(
-    0,
-    2.7,
-    4.4,
-    upperWall,
-    2.65,
-    'x',
-    [
-      [-1.5, -0.45, 0.8, 1.95],
-      [0.45, 1.5, 0.8, 1.95],
-    ],
-    true,
-    { siding: [-0.035, 2.65] },
-  );
-  wall(0, -3.5, 4.4, upperWall, 2.65, 'x', [[-0.65, 0.65, 0.8, 1.95]], false, {
-    siding: [-0.495, 2.65],
+  storey2(() => {
+    wall(
+      0,
+      2.7,
+      4.4,
+      upperWall,
+      2.65,
+      'x',
+      [
+        [-1.5, -0.45, 0.8, 1.95],
+        [0.45, 1.5, 0.8, 1.95],
+      ],
+      true,
+      { siding: [-0.035, 2.65] },
+    );
+    wall(0, -3.5, 4.4, upperWall, 2.65, 'x', [[-0.65, 0.65, 0.8, 1.95]], false, {
+      siding: [-0.495, 2.65],
+    });
+    wall(-2.2, -0.4, 6.2, upperWall, 2.65, 'z');
+    wall(2.2, -0.4, 6.2, upperWall, 2.65, 'z', [[-1.1, 0.3, 0.8, 1.95]], true);
   });
-  wall(-2.2, -0.4, 6.2, upperWall, 2.65, 'z');
-  wall(2.2, -0.4, 6.2, upperWall, 2.65, 'z', [[-1.1, 0.3, 0.8, 1.95]], true);
   // clip = { side, x, z: [zMin, zMax] }: inside that z-range the roof's `side` slope stops at x
   // (an upper storey's wall face), with part trusses; outside it the slope runs to its eave.
   // gables = [{ z, x0, x1, sx0, sx1, yBase }]: gable-end sheathing (x0..x1) in the end walls'
@@ -770,10 +787,12 @@ export function createHouse() {
     { z: 3.6, x0: -5.9225, x1: -1.58, sx0: -5.9425, sx1: -1.58, yBase: groundGable },
     { z: -3.6, x0: -5.9225, x1: -2.3225, sx0: -5.9425, sx1: -2.3425, yBase: groundGable },
   ]);
-  roof(0, -0.4, 4.4, 6.2, plateTop(upperWall, 2.65), 1.9, true, null, [
-    { z: 2.8, x0: -2.3225, x1: 2.3225, sx0: -2.3425, sx1: 2.3425, yBase: upperGable },
-    { z: -3.6, x0: -2.3225, x1: 2.3225, sx0: -2.3425, sx1: 2.3425, yBase: upperGable },
-  ]);
+  storey2(() =>
+    roof(0, -0.4, 4.4, 6.2, plateTop(upperWall, 2.65), 1.9, true, null, [
+      { z: 2.8, x0: -2.3225, x1: 2.3225, sx0: -2.3425, sx1: 2.3425, yBase: upperGable },
+      { z: -3.6, x0: -2.3225, x1: 2.3225, sx0: -2.3425, sx1: 2.3425, yBase: upperGable },
+    ]),
+  );
   roof(3.9, 0, 3.8, 7, plateTop(0.66, 2.7), 2.15, true, { side: -1, x: 2.3425, z: upperZ }, [
     { z: 3.6, x0: 1.78, x1: 5.9225, sx0: 1.78, sx1: 5.9425, yBase: groundGable },
     { z: -3.6, x0: 2.3225, x1: 5.9225, sx0: 2.3425, sx1: 5.9425, yBase: groundGable },
@@ -851,7 +870,8 @@ export function createHouse() {
     box('trim', x, postY, 4.9, 0.15, postH, 0.15);
   }
   box('lvl', 0.1, beamTop - 0.12, 4.9, 3.3, 0.24, 0.14);
-  box('framing', 0.1, 3.58, 2.775, 3.3, 0.24, 0.075); // ledger on the 2nd-floor rim
+  const porchRoof = { assembly: 'porch-roof' }; // explodes apart from the wall framing
+  box('framing', 0.1, 3.58, 2.775, 3.3, 0.24, 0.075, porchRoof); // ledger on the 2nd-floor rim
   const c = Math.cos(Math.atan(slope)),
     z0 = ledgerFace,
     z1 = porchFront + 0.02;
@@ -862,6 +882,7 @@ export function createHouse() {
       [x, rafterBottom(z1) + 0.07 / c, z1],
       0.045,
       0.14,
+      porchRoof,
     );
   const deckY = (z) => rafterBottom(z) + 0.14 / c + 0.0275 / c,
     zm = (z0 + z1 + 0.02) / 2;

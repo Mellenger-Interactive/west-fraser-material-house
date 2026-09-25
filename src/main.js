@@ -232,27 +232,37 @@ function looseOffset(id, p, out) {
   );
 }
 // Explode by assembly (products in SPREAD). Parts of one product within `join` of each other
-// (per axis, default touching) form an assembly, and its parts spread about the assembly's own
-// centre by `spread`, so it stays together with even gaps. An assembly lifts like its product. If
-// its parts rest on another product (userData.above), it lifts that product's lift plus
-// EXPLODE_GAP, or, if they also carry one (userData.below), halfway between the two. Then:
+// (per axis, default touching) that share userData.above / below / assembly / storey form an
+// assembly. Its parts spread about the assembly's own centre by `spread` (in plan only with
+// `plan`, for walls, whose layers stack by lift), so it stays together with even gaps.
+// An assembly lifts like its product. If its parts rest on another product (userData.above), it
+// lifts that product's lift plus EXPLODE_GAP, or, if they also carry one (userData.below),
+// halfway between the two. Parts of the 2nd storey (userData.storey = 1) add the ground storey's
+// top-plate lift, so each storey's stack (joists, subfloor, plates, studs, top plates) sits above
+// the one below. Then:
 // - slide (deck): long members stretch by the spread factor, so what they carry (balusters on a
 //   rail, boards on joists) stays within their length, and the assembly slides straight out from
 //   the house along its main horizontal axis until it clears every other exploded part by
 //   EXPLODE_GAP.
-// - in place (plates, webstock, rim): no stretch or slide. If any part would still overlap another
-//   exploded part, the whole assembly spreads further (up to MAX_SPREAD), or else lifts, until
-//   it clears, so its pieces never separate from each other.
-// Products are placed in SPREAD order, each clearing the final boxes of those before it.
+// - in place (everything else): no stretch or slide. If any part would still overlap another
+//   exploded part, the whole assembly spreads further (up to MAX_SPREAD), or else lifts (up to
+//   MAX_LIFT), until it clears, so its pieces never separate from each other.
+// Products are placed in SPREAD order. In-place assemblies clear the final boxes of the
+// assemblies placed before them only, so each product converted later must clear the ones
+// already done; a slide (last) also clears the loose positions of products not yet in SPREAD.
 const SPREAD = {
-    deck: { spread: 0.8, slide: true },
     plates: { spread: 0.5, join: [4, 0.01, 4] }, // one assembly per plate course
     webstock: { spread: 0.5, join: [0.5, 0.01, 0.5] }, // one assembly per floor
     rim: { spread: 0.5, join: [4, 0.01, 4] }, // one assembly per floor
+    // Wall framing per storey, I-joist top and bottom flanges per floor, porch roof framing.
+    framing: { spread: 0.5, plan: true, join: [0.5, 0.01, 0.5] },
+    floor: { spread: 0.5, join: [0.05, 0.01, 0.05] }, // one assembly per floor (panels are gapped)
+    deck: { spread: 0.8, slide: true }, // last, so it slides clear of everything else
   },
   EXPLODE_GAP = 0.7,
-  MAX_SPREAD = 2;
-// mesh -> { center, move, spread, stretch: extra scale per local axis, final: exploded box }
+  MAX_SPREAD = 2,
+  MAX_LIFT = 2;
+// mesh -> { center, move, spread and stretch: per axis, final: exploded box }
 const assembly = new Map();
 {
   const restBox = (m) => {
@@ -271,7 +281,7 @@ const assembly = new Map();
     return sc.map((x) => (x >= 3 * Math.min(...sc) ? s : 0));
   };
   // Each part's exploded box for an assembly centred on c, spread by s and moved by move.
-  const layout = (list, c, s, slide, move) =>
+  const layout = (list, c, s, slide, move, plan = false) =>
     list.map((m) => {
       const r = rest.get(m),
         st = slide ? stretchOf(m, s) : [0, 0, 0],
@@ -279,14 +289,23 @@ const assembly = new Map();
         half = r.getSize(new THREE.Vector3()).multiplyScalar(0.5),
         out = new THREE.Box3();
       for (let k = 0; k < 3; k++) {
-        const q = c.getComponent(k) + (mid.getComponent(k) - c.getComponent(k)) * (1 + s),
+        const q =
+            c.getComponent(k) +
+            (mid.getComponent(k) - c.getComponent(k)) * (1 + (plan && k === 1 ? 0 : s)),
           h = half.getComponent(k) * (1 + st[k]);
         out.min.setComponent(k, q - h);
         out.max.setComponent(k, q + h);
       }
       return out.translate(move);
     });
-  for (const [id, { spread, slide = false, join = [0.01, 0.01, 0.01] }] of Object.entries(SPREAD)) {
+  // Parts only join an assembly with parts that stack the same way (userData.above / below) and
+  // share its userData.assembly name and storey, if any.
+  const sameTags = (a, b) =>
+    ['above', 'below', 'assembly', 'storey'].every((k) => a.userData[k] === b.userData[k]);
+  for (const [
+    id,
+    { spread, slide = false, plan = false, join = [0.01, 0.01, 0.01] },
+  ] of Object.entries(SPREAD)) {
     const group = parts.filter((m) => m.userData.product === id);
     const boxes = group.map((m) => {
       const b = rest.get(m).clone();
@@ -298,25 +317,32 @@ const assembly = new Map();
       find = (i) => (root[i] === i ? i : (root[i] = find(root[i])));
     for (let i = 0; i < group.length; i++)
       for (let j = i + 1; j < group.length; j++)
-        if (boxes[i].intersectsBox(boxes[j])) root[find(i)] = find(j);
+        if (sameTags(group[i], group[j]) && boxes[i].intersectsBox(boxes[j]))
+          root[find(i)] = find(j);
     const members = new Map();
     group.forEach((m, i) => members.set(find(i), [...(members.get(find(i)) ?? []), m]));
-    // Everything else where it sits when exploded (finishes are hidden then).
+    // Everything else where it sits when exploded (finishes are hidden then): slides clear all of
+    // it; in-place assemblies clear only the products placed before them.
     const others = parts
       .filter((m) => m.userData.product !== id && !FINISHES.includes(m.userData.product))
       .map((m) => {
         const a = assembly.get(m);
-        return a
-          ? a.final
-          : rest
-              .get(m)
-              .clone()
-              .translate(looseOffset(m.userData.product, m.userData.basePosition, v));
-      });
+        if (a) return a.final;
+        if (!slide) return null;
+        return rest
+          .get(m)
+          .clone()
+          .translate(looseOffset(m.userData.product, m.userData.basePosition, v));
+      })
+      .filter(Boolean);
+    // Assemblies of this product already placed (e.g. joist flanges before wall framing).
+    const placed = [];
     const clashes = (bs) =>
       bs.some((b) => {
         const probe = b.clone().expandByScalar(-0.005);
-        return others.some((o) => o.intersectsBox(probe));
+        return (
+          others.some((o) => o.intersectsBox(probe)) || placed.some((o) => o.intersectsBox(probe))
+        );
       });
     for (const list of members.values()) {
       const bounds = new THREE.Box3();
@@ -324,14 +350,18 @@ const assembly = new Map();
       const c = bounds.getCenter(new THREE.Vector3());
       const { above, below } = list.find((m) => m.userData.above)?.userData ?? {},
         liftOf = (product) => looseOffset(product, c.toArray(), v).y,
-        lift = below
-          ? (liftOf(above) + liftOf(below)) / 2
-          : above
-            ? liftOf(above) + EXPLODE_GAP
-            : liftOf(id),
+        // Each storey stacks on the one below: it starts from that storey's top-plate lift.
+        storeyLift = (list[0].userData.storey ?? 0) * (liftOf('framing') + EXPLODE_GAP),
+        lift =
+          storeyLift +
+          (below
+            ? (liftOf(above) + liftOf(below)) / 2
+            : above
+              ? liftOf(above) + EXPLODE_GAP
+              : liftOf(id)),
         move = new THREE.Vector3(0, lift, 0);
       let s = spread,
-        final = layout(list, c, s, slide, move);
+        final = layout(list, c, s, slide, move, plan);
       if (slide) {
         const box = new THREE.Box3();
         for (const b of final) box.union(b);
@@ -341,7 +371,7 @@ const assembly = new Map();
           side = 2 - ax,
           sign = Math.sign(ax ? dz : dx) || 1;
         let t = 0;
-        for (const o of others) {
+        for (const o of [...others, ...placed]) {
           if (o.max.y <= box.min.y || o.min.y >= box.max.y) continue;
           if (o.max.getComponent(side) <= box.min.getComponent(side)) continue;
           if (o.min.getComponent(side) >= box.max.getComponent(side)) continue;
@@ -358,22 +388,29 @@ const assembly = new Map();
         // Spread the whole assembly further; failing that, lift it at its own spread.
         for (
           s = spread + 0.05;
-          s <= MAX_SPREAD && clashes((final = layout(list, c, s, slide, move)));
+          s <= MAX_SPREAD && clashes((final = layout(list, c, s, slide, move, plan)));
         )
           s += 0.05;
         if (s > MAX_SPREAD) {
           s = spread;
           do {
             move.y += 0.1;
-            final = layout(list, c, s, slide, move);
-          } while (clashes(final) && move.y < lift + 6);
+            final = layout(list, c, s, slide, move, plan);
+          } while (clashes(final) && move.y < lift + MAX_LIFT);
+          if (clashes(final)) {
+            // No clear spot: keep the normal lift and spread rather than flying off.
+            console.warn(`explode: ${id} assembly of ${list.length} parts still overlaps`);
+            move.y = lift;
+            final = layout(list, c, s, slide, move, plan);
+          }
         }
       }
+      placed.push(...final);
       list.forEach((m, i) =>
         assembly.set(m, {
           center: c.toArray(),
           move,
-          spread: s,
+          spread: [s, plan ? 0 : s, s],
           stretch: slide ? stretchOf(m, s) : [0, 0, 0],
           final: final[i],
         }),
@@ -411,7 +448,7 @@ function updateParts(dt) {
     mesh.scale.fromArray(data.baseScale);
     if (a)
       for (let k = 0; k < 3; k++) {
-        const v = mesh.position.getComponent(k) + explodeValue * a.spread * (b[k] - a.center[k]);
+        const v = mesh.position.getComponent(k) + explodeValue * a.spread[k] * (b[k] - a.center[k]);
         mesh.position.setComponent(k, v);
         mesh.scale.setComponent(k, mesh.scale.getComponent(k) * (1 + explodeValue * a.stretch[k]));
       }
