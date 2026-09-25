@@ -2,7 +2,7 @@
 :root {
   font-family: 'Open Sans', sans-serif;
   color: #333333;
-  background: #f7f7f7;
+  background: #f2f2f2;
   font-synthesis: none;
 }
 * {
@@ -35,7 +35,7 @@ main {
 .scene {
   position: relative;
   overflow: hidden;
-  background: radial-gradient(ellipse at 55% 55%, #fff 0%, #eef0ee 74%);
+  background: radial-gradient(ellipse at 55% 55%, #fff 0%, #ecf2ed 74%);
 }
 canvas {
   width: 100%;
@@ -66,7 +66,7 @@ canvas {
   max-width: min(380px, calc(100vw - 48px));
   line-height: 1.6;
   font-size: 13px;
-  color: #555555;
+  color: #595959;
 }
 .view-tools {
   position: absolute;
@@ -76,7 +76,7 @@ canvas {
   gap: 6px;
 }
 .view-tools button {
-  border: 1px solid #dddddd;
+  border: 1px solid #e6e6e6;
   background: #ffffffd9;
   color: #333333;
   border-radius: 7px;
@@ -99,11 +99,11 @@ canvas {
   display: flex;
   gap: 9px;
   align-items: center;
-  color: #666666;
+  color: #595959;
   font-size: 11px;
 }
 .gesture {
-  color: #6b6b6b;
+  color: #595959;
 }
 .compass {
   position: absolute;
@@ -119,7 +119,7 @@ canvas {
 }
 aside {
   background: #fff;
-  border-left: 1px solid #e2e2e2;
+  border-left: 1px solid #e6e6e6;
   padding: 28px 25px;
   overflow: auto;
 }
@@ -140,7 +140,7 @@ aside h2 {
 }
 .aside-description {
   font-size: 12px;
-  color: #666666;
+  color: #595959;
   line-height: 1.6;
   margin-bottom: 22px;
 }
@@ -156,7 +156,7 @@ aside h2 {
   align-items: center;
   min-height: 49px;
   padding: 8px;
-  border: 1px solid #dddddd;
+  border: 1px solid #e6e6e6;
   border-radius: 5px;
   background: white;
   color: #333333;
@@ -164,12 +164,12 @@ aside h2 {
   line-height: 1.3;
 }
 .product:hover {
-  background: #f2f7f4;
+  background: #e5f2eb;
 }
 .product.active {
   border-color: #007e3a;
-  background: #eaf5f0;
-  color: #00593e;
+  background: #e5f2eb;
+  color: #00642e;
   box-shadow: inset 0 0 0 1px #007e3a;
 }
 .swatch {
@@ -183,12 +183,12 @@ aside h2 {
 .product small {
   display: block;
   font-size: 9px;
-  color: #6b6b6b;
+  color: #595959;
   margin-top: 3px;
 }
 #detail {
   margin-top: 20px;
-  border-top: 1px solid #e2e2e2;
+  border-top: 1px solid #e6e6e6;
   padding-top: 17px;
 }
 #detail .eyebrow {
@@ -204,7 +204,7 @@ aside h2 {
 #detail p {
   font-size: 12px;
   line-height: 1.7;
-  color: #555555;
+  color: #595959;
   margin: 7px 0 12px;
 }
 #detail a {
@@ -218,7 +218,7 @@ aside h2 {
   padding: 0;
   margin-left: 12px;
   font-size: 11px;
-  color: #666666;
+  color: #595959;
 }
 footer {
   display: flex;
@@ -234,7 +234,7 @@ footer {
   flex-shrink: 0;
 }
 .build-label .eyebrow {
-  color: #eef8f3;
+  color: #e5f2eb;
   font-size: 9px;
   display: block;
   margin-bottom: 8px;
@@ -270,7 +270,7 @@ input[type='range'] {
   background: none;
   border: 0;
   padding: 0;
-  color: #eef8f3;
+  color: #e5f2eb;
   font-size: 10px;
 }
 #percent {
@@ -281,13 +281,13 @@ input[type='range'] {
 }
 #percent span {
   font-size: 13px;
-  color: #eef8f3;
+  color: #e5f2eb;
 }
 .source-note {
   padding: 12px 42px;
-  color: #6b6b6b;
+  color: #595959;
   font-size: 10px;
-  background: #f7f7f7;
+  background: #f2f2f2;
   display: flex;
   justify-content: space-between;
   gap: 20px;
@@ -366,7 +366,7 @@ input[type='range'] {
   }
   aside {
     border-left: 0;
-    border-top: 1px solid #e2e2e2;
+    border-top: 1px solid #e6e6e6;
     padding: 24px;
   }
   aside h2 {
