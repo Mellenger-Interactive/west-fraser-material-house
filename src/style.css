@@ -23,8 +23,12 @@ button {
 button:focus-visible,
 a:focus-visible,
 input:focus-visible {
-  outline: 3px solid #d78b31;
-  outline-offset: 4px;
+  outline: 2px solid #80be9c;
+  outline-offset: 2px;
+}
+footer button:focus-visible,
+footer input:focus-visible {
+  outline-color: #ffffff;
 }
 main {
   display: grid;
