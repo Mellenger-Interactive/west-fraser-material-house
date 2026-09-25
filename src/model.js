@@ -890,11 +890,13 @@ export function createHouse() {
   box('deck', 9.32, 0.83, 0.815, 0.09, 0.08, 8.14);
   box('deck', 9.32, 0.33, 0.815, 0.12, 0.35, 8.11);
   // Interior MDF cabinets (carcass, front, top) and pulls; structural products stay independent.
+  // An island about 1 m behind the right wing's front wall, doors facing its framed opening
+  // (as in the reference).
   for (let x = 2.6; x < 5.1; x += 0.65) {
-    box('mdf', x, 1.15, -2.95, 0.6, 0.94, 0.6);
-    box('mdf', x, 1.16, -2.63, 0.56, 0.85, 0.04);
-    box('mdf', x, 1.66, -2.94, 0.65, 0.065, 0.7);
-    box('trim', x + 0.17, 1.33, -2.594, 0.025, 0.16, 0.025);
+    box('mdf', x, 1.15, 2.05, 0.6, 0.94, 0.6);
+    box('mdf', x, 1.16, 2.37, 0.56, 0.85, 0.04);
+    box('mdf', x, 1.66, 2.06, 0.65, 0.065, 0.7);
+    box('trim', x + 0.17, 1.33, 2.406, 0.025, 0.16, 0.025);
   }
   house.position.x = -1;
   return { house, parts, products, mats };
