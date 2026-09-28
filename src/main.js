@@ -247,7 +247,9 @@ function looseOffset(id, p, out) {
 // - in place (everything else): no stretch or slide. If any part would still overlap another
 //   exploded part, the whole assembly spreads further (up to MAX_SPREAD), or else lifts (up to
 //   MAX_LIFT), until it clears, so its pieces never separate from each other.
-// - follow (lvl headers): see `host` below.
+// - follow (lvl headers): see `host` below. stack (trusses): see `under` below. push (trusses): an
+//   in-place assembly that still overlaps slides out like a slide (no stretch) instead of
+//   spreading or lifting (the wing roofs, whose inner halves sit under the 2nd storey).
 // Products are placed in SPREAD order. In-place assemblies clear the final boxes of the
 // assemblies placed before them only, so each product converted later must clear the ones
 // already done; a slide (last) also clears the loose positions of products not yet in SPREAD.
@@ -261,6 +263,7 @@ const SPREAD = {
     // Window and door headers follow their wall's framing and pull out of the wall; the porch beam
     // (tagged in model.js) hangs below the porch rafters.
     lvl: { spread: 0.5, follow: 'framing' },
+    trusses: { spread: 0.5, join: [0.05, 0.05, 0.6], stack: true, push: true }, // one per roof
     deck: { spread: 0.8, slide: true }, // last, so it slides clear of everything else
   },
   EXPLODE_GAP = 0.7,
@@ -310,7 +313,15 @@ const assembly = new Map();
   const groups = [];
   for (const [
     id,
-    { spread, slide = false, plan = false, follow, join = [0.01, 0.01, 0.01] },
+    {
+      spread,
+      slide = false,
+      plan = false,
+      follow,
+      stack = false,
+      push = false,
+      join = [0.01, 0.01, 0.01],
+    },
   ] of Object.entries(SPREAD)) {
     const group = parts.filter((m) => m.userData.product === id);
     const boxes = group.map((m) => {
@@ -366,6 +377,28 @@ const assembly = new Map();
               ? liftOf(above) + EXPLODE_GAP
               : liftOf(id)),
         move = new THREE.Vector3(0, lift, 0);
+      // stack: sit EXPLODE_GAP above the highest exploded part directly beneath (a roof on its
+      // top plates), instead of the product's own lift.
+      if (stack) {
+        const under = parts.filter((m) => {
+          const r = rest.get(m);
+          return (
+            assembly.has(m) &&
+            r.max.y <= bounds.min.y + 0.05 &&
+            r.max.x > bounds.min.x &&
+            r.min.x < bounds.max.x &&
+            r.max.z > bounds.min.z &&
+            r.min.z < bounds.max.z
+          );
+        });
+        if (under.length) {
+          const top = Math.max(...under.map((m) => assembly.get(m).final.max.y)),
+            bottom = Math.min(
+              ...layout(list, c, spread, slide, v.set(0, 0, 0), plan).map((b) => b.min.y),
+            );
+          move.y = top - bottom + EXPLODE_GAP;
+        }
+      }
       let s = spread,
         final = layout(list, c, s, slide, move, plan);
       // follow: take the transform of the containing wall-framing group of the same storey (so a
@@ -416,7 +449,9 @@ const assembly = new Map();
         placed.push(...final);
         continue;
       }
-      if (slide) {
+      // Slide the whole assembly straight out from the house along its main horizontal axis until
+      // it clears every other exploded part by EXPLODE_GAP.
+      const slideOut = () => {
         const box = new THREE.Box3();
         for (const b of final) box.union(b);
         const dx = c.x - houseCenter.x,
@@ -438,7 +473,10 @@ const assembly = new Map();
         v.set(0, 0, 0).setComponent(ax, sign * (t + EXPLODE_GAP));
         move.add(v);
         for (const b of final) b.translate(v);
-      } else if (clashes(final)) {
+      };
+      if (slide) slideOut();
+      else if (push && clashes(final)) slideOut();
+      else if (clashes(final)) {
         // Spread the whole assembly further; failing that, lift it at its own spread.
         for (
           s = spread + 0.05;
@@ -447,14 +485,15 @@ const assembly = new Map();
           s += 0.05;
         if (s > MAX_SPREAD) {
           s = spread;
+          const base = move.y;
           do {
             move.y += 0.1;
             final = layout(list, c, s, slide, move, plan);
-          } while (clashes(final) && move.y < lift + MAX_LIFT);
+          } while (clashes(final) && move.y < base + MAX_LIFT);
           if (clashes(final)) {
             // No clear spot: keep the normal lift and spread rather than flying off.
             console.warn(`explode: ${id} assembly of ${list.length} parts still overlaps`);
-            move.y = lift;
+            move.y = base;
             final = layout(list, c, s, slide, move, plan);
           }
         }
