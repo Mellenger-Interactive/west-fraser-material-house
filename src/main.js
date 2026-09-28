@@ -275,6 +275,8 @@ const SPREAD = {
     // Gables (wall sheathing, userData.phase) follow their own roof's trusses (userData.hostName),
     // so they sit centred on the end truss, and pull out past the roof's end.
     gables: { product: 'walls', spread: 0.5, follow: 'trusses' },
+    // The MDF cabinet island: one assembly, sitting on the exploded subfloor.
+    mdf: { spread: 0.5, join: [0.1, 0.1, 0.1], stack: true },
     deck: { spread: 0.8, slide: true }, // last, so it slides clear of everything else
   },
   EXPLODE_GAP = 0.3,
