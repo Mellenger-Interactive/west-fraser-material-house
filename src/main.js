@@ -154,7 +154,10 @@ $('#cutaway').onclick = () => {
   cutaway = !cutaway;
   $('#cutaway').setAttribute('aria-pressed', cutaway);
 };
-$('#reset').onclick = reset;
+$('#reset').onclick = () => {
+  reset();
+  select(null);
+};
 const raycaster = new THREE.Raycaster(),
   pointer = new THREE.Vector2();
 let down;
