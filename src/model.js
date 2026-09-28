@@ -783,9 +783,12 @@ export function createHouse() {
       box(id, mx, my, z, 1, 1, 1, { geo, ...o });
     };
     for (const { z, x0, x1, sx0, sx1, yBase } of gables) {
+      // Exploded, a gable follows its roof's trusses (hostName) in the `gables` pass of SPREAD.
       gablePanel('walls', x0, x1, yBase, z, 0.045, {
         assembly: `gable-${parts.length}`,
         normal: [0, 0, Math.sign(z - cz)],
+        phase: 'gables',
+        hostName: tag.assembly,
       });
       gablePanel('siding', sx0, sx1, yBase, z + Math.sign(z - cz) * 0.0325, 0.02, { cut });
     }
@@ -886,7 +889,9 @@ export function createHouse() {
   }
   // LVL beam on the posts, under the rafters: exploded, it hangs below the porch roof framing.
   box('lvl', 0.1, beamTop - 0.12, 4.9, 3.3, 0.24, 0.14, { above: 'base', below: 'framing' });
-  const porchRoof = { assembly: 'porch-roof' }; // explodes apart from the wall framing
+  // Exploded apart from the wall framing; if it's boxed in under the 2nd storey, it slides out
+  // forward (push, see SPREAD in main.js).
+  const porchRoof = { assembly: 'porch-roof', push: true };
   box('framing', 0.1, 3.58, 2.775, 3.3, 0.24, 0.075, porchRoof); // ledger on the 2nd-floor rim
   const c = Math.cos(Math.atan(slope)),
     z0 = ledgerFace,

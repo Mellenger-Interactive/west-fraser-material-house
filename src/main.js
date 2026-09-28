@@ -227,7 +227,7 @@ function looseOffset(id, p, out) {
   const level = products.findIndex((q) => q.id === id);
   return out.set(
     (p[0] > 0.5 ? 1 : -1) * (level >= 0 ? 0.2 + level * 0.1 : 0),
-    level >= 0 ? level * 0.32 : 0,
+    level >= 0 ? level * 0.15 : 0,
     (p[2] > 0 ? 1 : -1) * 0.8,
   );
 }
@@ -240,17 +240,17 @@ function looseOffset(id, p, out) {
 // halfway between the two. Parts of the 2nd storey (userData.storey = 1) add the ground storey's
 // top-plate lift, so each storey's stack (joists, subfloor, plates, studs, top plates) sits above
 // the one below. Then:
-// - slide (deck): long members stretch by the spread factor, so what they carry (balusters on a
-//   rail, boards on joists) stays within their length, and the assembly slides straight out from
-//   the house along its main horizontal axis until it clears every other exploded part by
-//   EXPLODE_GAP.
+// - slide (deck): long members stretch in plan by the spread factor, so what they carry
+//   (balusters on a rail, boards on joists) stays within their length, and the assembly slides
+//   straight out from the house along its main horizontal axis until it clears every other
+//   exploded part by EXPLODE_GAP.
 // - in place (everything else): no stretch or slide. If any part would still overlap another
 //   exploded part, the whole assembly spreads further (up to MAX_SPREAD), or else lifts (up to
 //   MAX_LIFT), until it clears, so its pieces never separate from each other.
 // - follow (lvl headers, wall and roof sheathing): see `host` below; face: see `face` below.
 //   stack (trusses): see `under` below. push (trusses): an in-place assembly that still overlaps
 //   slides out like a slide (no stretch) instead of spreading or lifting (the wing roofs, whose
-//   inner halves sit under the 2nd storey).
+//   inner halves sit under the 2nd storey; per assembly with userData.push: the porch roof).
 // Products are placed in SPREAD order. In-place assemblies clear the final boxes of the
 // assemblies placed before them only, so each product converted later must clear the ones
 // already done; a slide (last) also clears the loose positions of products not yet in SPREAD.
@@ -264,7 +264,7 @@ const SPREAD = {
     // Window and door headers follow their wall's framing and pull out of the wall; the porch beam
     // (tagged in model.js) hangs below the porch rafters.
     lvl: { spread: 0.5, follow: 'framing' },
-    // Wall sheathing (one assembly per wall face and per gable, tagged in model.js) follows its
+    // Wall sheathing (one assembly per wall face, tagged in model.js; gables below) follows its
     // wall's framing and pulls out the way it faces, past the headers. Placed before the
     // roofs, so a wing roof's push leaves room for the upper wall sheathing beside it.
     walls: { spread: 0.5, follow: 'framing', join: [0.05, 0.05, 0.05] },
@@ -272,9 +272,12 @@ const SPREAD = {
     // Roof sheathing follows its own roof's trusses (or the porch roof framing) by assembly name,
     // and each panel lifts off its slope by EXPLODE_GAP (face).
     roof: { spread: 0.5, follow: ['trusses', 'framing'], face: true },
+    // Gables (wall sheathing, userData.phase) follow their own roof's trusses (userData.hostName),
+    // so they sit centred on the end truss, and pull out past the roof's end.
+    gables: { product: 'walls', spread: 0.5, follow: 'trusses' },
     deck: { spread: 0.8, slide: true }, // last, so it slides clear of everything else
   },
-  EXPLODE_GAP = 0.7,
+  EXPLODE_GAP = 0.3,
   MAX_SPREAD = 1,
   MAX_LIFT = 1;
 // mesh -> { center, move, spread and stretch: per axis, final: exploded box }
@@ -291,9 +294,11 @@ const assembly = new Map();
     if (products.some((q) => q.id === m.userData.product)) houseBox.union(rest.get(m));
   const houseCenter = houseBox.getCenter(new THREE.Vector3()),
     v = new THREE.Vector3();
+  // Long members stretch along their length, in plan only: posts and balusters keep their height,
+  // so a slide's footprint doesn't grow upward into what sits above it.
   const stretchOf = (m, s) => {
     const sc = m.userData.baseScale;
-    return sc.map((x) => (x >= 3 * Math.min(...sc) ? s : 0));
+    return sc.map((x, k) => (k !== 1 && x >= 3 * Math.min(...sc) ? s : 0));
   };
   // Each part's exploded box for an assembly centred on c, spread by s and moved by move.
   const layout = (list, c, s, slide, move, plan = false) =>
@@ -328,12 +333,16 @@ const assembly = new Map();
       follow,
       stack = false,
       push = false,
+      product = id,
       normal: pullNormal,
       face = false,
       join = [0.01, 0.01, 0.01],
     },
   ] of Object.entries(SPREAD)) {
-    const group = parts.filter((m) => m.userData.product === id);
+    // A SPREAD key is a product, or a pass over the parts of `product` tagged userData.phase = key.
+    const group = parts.filter(
+      (m) => m.userData.product === product && (m.userData.phase ?? m.userData.product) === id,
+    );
     const boxes = group.map((m) => {
       const b = rest.get(m).clone();
       b.min.sub(v.fromArray(join));
@@ -351,7 +360,7 @@ const assembly = new Map();
     // Everything else where it sits when exploded (finishes are hidden then): slides clear all of
     // it; in-place assemblies clear only the products placed before them.
     const others = parts
-      .filter((m) => m.userData.product !== id && !FINISHES.includes(m.userData.product))
+      .filter((m) => !group.includes(m) && !FINISHES.includes(m.userData.product))
       .map((m) => {
         const a = assembly.get(m);
         if (a) return a.final;
@@ -385,7 +394,7 @@ const assembly = new Map();
             ? (liftOf(above) + liftOf(below)) / 2
             : above
               ? liftOf(above) + EXPLODE_GAP
-              : liftOf(id)),
+              : liftOf(product)),
         move = new THREE.Vector3(0, lift, 0);
       // stack: sit EXPLODE_GAP above the highest exploded part directly beneath (a roof on its
       // top plates), instead of the product's own lift.
@@ -416,7 +425,7 @@ const assembly = new Map();
       // the wall (userData.normal, or its thin horizontal axis away from the house) until it
       // clears everything behind it by EXPLODE_GAP.
       const follows = [follow].flat(),
-        name = list[0].userData.assembly,
+        name = list[0].userData.hostName ?? list[0].userData.assembly,
         host =
           follow &&
           (groups.find((g) => follows.includes(g.id) && name && g.assembly === name) ??
@@ -512,32 +521,46 @@ const assembly = new Map();
         continue;
       }
       // Slide the whole assembly straight out from the house along its main horizontal axis until
-      // it clears every other exploded part by EXPLODE_GAP.
-      const slideOut = () => {
-        const box = new THREE.Box3();
-        for (const b of final) box.union(b);
+      // it clears every other exploded part by EXPLODE_GAP. A slide (deck) steps until none of its
+      // parts touches another part or sits within EXPLODE_GAP behind it; a push (wing and porch
+      // roofs) clears its whole bounding box, which leaves room for the sheathing that lifts off
+      // its slopes.
+      const slideOut = (perPart) => {
         const dx = c.x - houseCenter.x,
           dz = c.z - houseCenter.z,
           ax = Math.abs(dx) >= Math.abs(dz) ? 0 : 2,
-          side = 2 - ax,
-          sign = Math.sign(ax ? dz : dx) || 1;
+          sign = Math.sign(ax ? dz : dx) || 1,
+          all = [...others, ...placed],
+          whole = new THREE.Box3();
+        for (const b of final) whole.union(b);
+        const boxes = perPart ? final : [whole];
         let t = 0;
-        for (const o of [...others, ...placed]) {
-          if (o.max.y <= box.min.y || o.min.y >= box.max.y) continue;
-          if (o.max.getComponent(side) <= box.min.getComponent(side)) continue;
-          if (o.min.getComponent(side) >= box.max.getComponent(side)) continue;
-          const need =
-            sign > 0
-              ? o.max.getComponent(ax) - box.min.getComponent(ax)
-              : box.max.getComponent(ax) - o.min.getComponent(ax);
-          t = Math.max(t, need);
+        for (let pass = 0; pass < 60; pass++) {
+          let next = t;
+          for (const b of boxes) {
+            const probe = b.clone().translate(v.set(0, 0, 0).setComponent(ax, sign * t));
+            if (sign > 0) probe.min.setComponent(ax, probe.min.getComponent(ax) - EXPLODE_GAP);
+            else probe.max.setComponent(ax, probe.max.getComponent(ax) + EXPLODE_GAP);
+            probe.expandByScalar(-0.005);
+            for (const o of all)
+              if (o.intersectsBox(probe))
+                next = Math.max(
+                  next,
+                  EXPLODE_GAP +
+                    (sign > 0
+                      ? o.max.getComponent(ax) - b.min.getComponent(ax)
+                      : b.max.getComponent(ax) - o.min.getComponent(ax)),
+                );
+          }
+          if (next === t) break;
+          t = next;
         }
-        v.set(0, 0, 0).setComponent(ax, sign * (t + EXPLODE_GAP));
+        v.set(0, 0, 0).setComponent(ax, sign * t);
         move.add(v);
         for (const b of final) b.translate(v);
       };
-      if (slide) slideOut();
-      else if (push && clashes(final)) slideOut();
+      if (slide) slideOut(true);
+      else if ((push || list[0].userData.push) && clashes(final)) slideOut(false);
       else if (clashes(final)) {
         // Spread the whole assembly further; failing that, lift it at its own spread.
         for (
