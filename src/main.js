@@ -247,9 +247,10 @@ function looseOffset(id, p, out) {
 // - in place (everything else): no stretch or slide. If any part would still overlap another
 //   exploded part, the whole assembly spreads further (up to MAX_SPREAD), or else lifts (up to
 //   MAX_LIFT), until it clears, so its pieces never separate from each other.
-// - follow (lvl headers): see `host` below. stack (trusses): see `under` below. push (trusses): an
-//   in-place assembly that still overlaps slides out like a slide (no stretch) instead of
-//   spreading or lifting (the wing roofs, whose inner halves sit under the 2nd storey).
+// - follow (lvl headers, wall and roof sheathing): see `host` below; face: see `face` below.
+//   stack (trusses): see `under` below. push (trusses): an in-place assembly that still overlaps
+//   slides out like a slide (no stretch) instead of spreading or lifting (the wing roofs, whose
+//   inner halves sit under the 2nd storey).
 // Products are placed in SPREAD order. In-place assemblies clear the final boxes of the
 // assemblies placed before them only, so each product converted later must clear the ones
 // already done; a slide (last) also clears the loose positions of products not yet in SPREAD.
@@ -263,16 +264,19 @@ const SPREAD = {
     // Window and door headers follow their wall's framing and pull out of the wall; the porch beam
     // (tagged in model.js) hangs below the porch rafters.
     lvl: { spread: 0.5, follow: 'framing' },
-    trusses: { spread: 0.5, join: [0.05, 0.05, 0.6], stack: true, push: true }, // one per roof
     // Wall sheathing (one assembly per wall face and per gable, tagged in model.js) follows its
-    // wall's framing and pulls out the way it faces, past the headers.
+    // wall's framing and pulls out the way it faces, past the headers. Placed before the
+    // roofs, so a wing roof's push leaves room for the upper wall sheathing beside it.
     walls: { spread: 0.5, follow: 'framing', join: [0.05, 0.05, 0.05] },
+    trusses: { spread: 0.5, join: [0.05, 0.05, 0.6], stack: true, push: true }, // one per roof
+    // Roof sheathing follows its own roof's trusses (or the porch roof framing) by assembly name,
+    // and each panel lifts off its slope by EXPLODE_GAP (face).
+    roof: { spread: 0.5, follow: ['trusses', 'framing'], face: true },
     deck: { spread: 0.8, slide: true }, // last, so it slides clear of everything else
   },
   EXPLODE_GAP = 0.7,
-  MAX_SPREAD = 2,
-  MAX_LIFT = 2,
-  MAX_PULL = 2;
+  MAX_SPREAD = 1,
+  MAX_LIFT = 1;
 // mesh -> { center, move, spread and stretch: per axis, final: exploded box }
 const assembly = new Map();
 {
@@ -324,6 +328,8 @@ const assembly = new Map();
       follow,
       stack = false,
       push = false,
+      normal: pullNormal,
+      face = false,
       join = [0.01, 0.01, 0.01],
     },
   ] of Object.entries(SPREAD)) {
@@ -409,29 +415,56 @@ const assembly = new Map();
       // header or a wall's sheathing stays lined up with its opening), then pull straight out of
       // the wall (userData.normal, or its thin horizontal axis away from the house) until it
       // clears everything behind it by EXPLODE_GAP.
-      const host =
-        follow &&
-        groups.find(
-          (g) =>
-            g.id === follow &&
-            g.storey === (list[0].userData.storey ?? 0) &&
-            // In plan, a little wider than the wall lines: sheathing and gables sit just outside.
-            c.x > g.bounds.min.x - 0.3 &&
-            c.x < g.bounds.max.x + 0.3 &&
-            c.z > g.bounds.min.z - 0.3 &&
-            c.z < g.bounds.max.z + 0.3,
-        );
+      const follows = [follow].flat(),
+        name = list[0].userData.assembly,
+        host =
+          follow &&
+          (groups.find((g) => follows.includes(g.id) && name && g.assembly === name) ??
+            groups.find(
+              (g) =>
+                follows.includes(g.id) &&
+                !g.assembly &&
+                g.storey === (list[0].userData.storey ?? 0) &&
+                // In plan, a little wider than the wall lines (sheathing and gables sit outside).
+                c.x > g.bounds.min.x - 0.3 &&
+                c.x < g.bounds.max.x + 0.3 &&
+                c.z > g.bounds.min.z - 0.3 &&
+                c.z < g.bounds.max.z + 0.3,
+            ));
       if (host) {
         s = host.s;
         move.copy(host.move);
         final = layout(list, host.c, s, false, move, host.plan);
+        if (face) {
+          // Each part lifts off the surface it lies on: along its own thin axis, upward.
+          list.forEach((m, i) => {
+            const sc = m.userData.baseScale,
+              k = sc.indexOf(Math.min(...sc)),
+              dir = new THREE.Vector3()
+                .setComponent(k, 1)
+                .applyQuaternion(new THREE.Quaternion().fromArray(m.userData.baseQuaternion));
+            if (dir.y < 0) dir.negate();
+            const offset = dir.multiplyScalar(EXPLODE_GAP);
+            final[i].translate(offset);
+            assembly.set(m, {
+              center: host.c.toArray(),
+              move,
+              offset,
+              spread: [s, host.plan ? 0 : s, s],
+              stretch: [0, 0, 0],
+              final: final[i],
+            });
+          });
+          placed.push(...final);
+          continue;
+        }
         const box = new THREE.Box3();
         for (const b of final) box.union(b);
         const size = box.getSize(new THREE.Vector3()),
           mid = box.getCenter(new THREE.Vector3()),
-          normal = list[0].userData.normal, // the way sheathing faces
+          normal = list[0].userData.normal ?? pullNormal, // the way sheathing faces
           away = (k) => Math.sign(k ? mid.z - houseCenter.z : mid.x - houseCenter.x) || 1,
-          thin = normal ? (normal[0] ? 0 : 2) : size.x <= size.z ? 0 : 2;
+          thin = normal ? normal.findIndex(Boolean) : size.x <= size.z ? 0 : 2;
         // Distance to step along axis k (direction sign) until nothing touches it or sits within
         // EXPLODE_GAP behind it.
         const pull = (k, sign) => {
@@ -456,17 +489,13 @@ const assembly = new Map();
           }
           return t;
         };
-        // Out of the wall (the way it faces). If that runs into the house for more than MAX_PULL
-        // (the recess return walls face into the porch), slide along the wall away from the house
-        // instead, by at least EXPLODE_GAP.
-        let ax = thin,
-          sign = normal ? normal[thin] : away(thin),
-          t = pull(ax, sign);
-        if (t > MAX_PULL) {
-          ax = 2 - thin;
-          sign = away(ax);
-          t = Math.max(EXPLODE_GAP, pull(ax, sign));
-        }
+        // Out of the wall (the way it faces), or, for sheathing that faces into the house
+        // (userData.along: the recess return walls), along the wall away from it by at least
+        // EXPLODE_GAP.
+        const along = list[0].userData.along,
+          ax = along ? 2 - thin : thin,
+          sign = along ? away(ax) : normal ? normal[thin] : away(thin),
+          t = along ? Math.max(EXPLODE_GAP, pull(ax, sign)) : pull(ax, sign);
         v.set(0, 0, 0).setComponent(ax, sign * t);
         move.add(v);
         for (const b of final) b.translate(v);
@@ -532,8 +561,17 @@ const assembly = new Map();
         }
       }
       placed.push(...final);
-      if (!slide && !above && !list[0].userData.assembly)
-        groups.push({ id, storey: list[0].userData.storey ?? 0, bounds, c, s, plan, move });
+      if (!slide && !above)
+        groups.push({
+          id,
+          assembly: list[0].userData.assembly,
+          storey: list[0].userData.storey ?? 0,
+          bounds,
+          c,
+          s,
+          plan,
+          move,
+        });
       list.forEach((m, i) =>
         assembly.set(m, {
           center: c.toArray(),
@@ -573,6 +611,7 @@ function updateParts(dt) {
     mesh.position.set(b[0], b[1] + (1 - smooth) * (3 + (i % 5) * 0.35), b[2]);
     const a = assembly.get(mesh);
     mesh.position.addScaledVector(a ? a.move : looseOffset(data.product, b, offset), explodeValue);
+    if (a?.offset) mesh.position.addScaledVector(a.offset, explodeValue);
     mesh.scale.fromArray(data.baseScale);
     if (a)
       for (let k = 0; k < 3; k++) {

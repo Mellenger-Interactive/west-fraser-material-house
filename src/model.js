@@ -428,10 +428,12 @@ export function createHouse() {
     const breaks = [-length / 2 - e0, length / 2 + e1, ...openings.flatMap((o) => [o[0], o[1]])];
     for (let a = -length / 2 + 1.2; a < length / 2; a += 1.2) breaks.push(a);
     breaks.sort((a, b) => a - b);
-    // Exploded, each wall's sheathing moves as one piece, out along the way it faces.
+    // Exploded, each wall's sheathing moves as one piece, out along the way it faces, or, where it
+    // faces into the house (opts.out: the recess return walls), along the wall away from it.
     const sheathing = {
       assembly: `sheathing-${parts.length}`,
       normal: axis === 'x' ? [0, 0, out] : [out, 0, 0],
+      ...(opts.out ? { along: true } : {}),
     };
     for (let i = 0; i < breaks.length - 1; i++) {
       const a = breaks[i],
@@ -636,6 +638,9 @@ export function createHouse() {
       clipped = (z0, z1) => clip && z1 > clip.z[0] && z0 < clip.z[1];
     // Same truss count as before, spread so the end trusses sit on the end walls.
     const n = Math.floor((d + 0.45) / 0.54);
+    // Trusses and roof sheathing share an assembly name, so exploded, the sheathing follows its
+    // own roof's trusses (see SPREAD in main.js).
+    const tag = { assembly: `roof-${parts.length}` };
     for (let i = 0; i <= n; i++) {
       const z = cz - d / 2 + (d * i) / n,
         s = clipped(z - 0.07, z + 0.07) ? clip.side : 0,
@@ -643,19 +648,20 @@ export function createHouse() {
         stop = [clip?.x, y + rise * (1 - fc), z],
         tail = y + rise * (1 - E / H);
       // Part truss on the clipped side: its top chord and the bottom chord end at the wall face.
-      beam('trusses', s === -1 ? stop : [cx - E, tail, z], apex, 0.1, 0.14);
-      beam('trusses', apex, s === 1 ? stop : [cx + E, tail, z], 0.1, 0.14);
+      beam('trusses', s === -1 ? stop : [cx - E, tail, z], apex, 0.1, 0.14, tag);
+      beam('trusses', apex, s === 1 ? stop : [cx + E, tail, z], 0.1, 0.14, tag);
       beam(
         'trusses',
         s === -1 ? [clip.x, y, z] : [cx - E, y, z],
         s === 1 ? [clip.x, y, z] : [cx + E, y, z],
         0.1,
         0.14,
+        tag,
       );
-      beam('trusses', [cx, y, z], apex, 0.075, 0.1);
+      beam('trusses', [cx, y, z], apex, 0.075, 0.1, tag);
       for (const side of [-1, 1])
         if (side !== s || w * 0.28 < fc * H - 0.05)
-          beam('trusses', [cx + side * w * 0.28, y + rise * 0.43, z], [cx, y, z], 0.075, 0.1);
+          beam('trusses', [cx + side * w * 0.28, y + rise * 0.43, z], [cx, y, z], 0.075, 0.1, tag);
     }
     for (const side of [-1, 1]) {
       const slopeW = Math.sqrt(H ** 2 + rise ** 2),
@@ -671,7 +677,7 @@ export function createHouse() {
           slopeW * (b - a) - gapW,
           thick,
           z1 - z0 - gapD,
-          { rot: [0, 0, -angle], cut: cutPiece },
+          { rot: [0, 0, -angle], cut: cutPiece, ...(id === 'roof' ? tag : {}) },
         );
       const zs = [];
       for (let z = cz - d / 2 - 0.25; z < cz + d / 2 + 0.24; z += 1.2) zs.push(z);
@@ -903,6 +909,7 @@ export function createHouse() {
     box('roof', 0.1, deckY((a + b) / 2), (a + b) / 2, 3.31, 0.055, (b - a) / c - 0.018, {
       rot: [Math.atan(slope), 0, 0],
       cut: true,
+      ...porchRoof,
     });
   const pLen = (z1 + 0.02 - z0) / c,
     pz = (z0 + z1 + 0.02) / 2;
