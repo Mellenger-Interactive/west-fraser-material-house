@@ -428,6 +428,11 @@ export function createHouse() {
     const breaks = [-length / 2 - e0, length / 2 + e1, ...openings.flatMap((o) => [o[0], o[1]])];
     for (let a = -length / 2 + 1.2; a < length / 2; a += 1.2) breaks.push(a);
     breaks.sort((a, b) => a - b);
+    // Exploded, each wall's sheathing moves as one piece, out along the way it faces.
+    const sheathing = {
+      assembly: `sheathing-${parts.length}`,
+      normal: axis === 'x' ? [0, 0, out] : [out, 0, 0],
+    };
     for (let i = 0; i < breaks.length - 1; i++) {
       const a = breaks[i],
         b = breaks[i + 1];
@@ -453,6 +458,7 @@ export function createHouse() {
         else mesh.position.x += 0.1 * out;
         mesh.userData.basePosition = mesh.position.toArray();
         mesh.userData.cut = cut;
+        Object.assign(mesh.userData, sheathing);
         // Edges stay green on strips narrower than the sheathing is thick.
         mesh.geometry = panelGeos[axis === 'x' ? 2 : 0];
       }
@@ -771,7 +777,10 @@ export function createHouse() {
       box(id, mx, my, z, 1, 1, 1, { geo, ...o });
     };
     for (const { z, x0, x1, sx0, sx1, yBase } of gables) {
-      gablePanel('walls', x0, x1, yBase, z, 0.045);
+      gablePanel('walls', x0, x1, yBase, z, 0.045, {
+        assembly: `gable-${parts.length}`,
+        normal: [0, 0, Math.sign(z - cz)],
+      });
       gablePanel('siding', sx0, sx1, yBase, z + Math.sign(z - cz) * 0.0325, 0.02, { cut });
     }
   }

@@ -264,11 +264,15 @@ const SPREAD = {
     // (tagged in model.js) hangs below the porch rafters.
     lvl: { spread: 0.5, follow: 'framing' },
     trusses: { spread: 0.5, join: [0.05, 0.05, 0.6], stack: true, push: true }, // one per roof
+    // Wall sheathing (one assembly per wall face and per gable, tagged in model.js) follows its
+    // wall's framing and pulls out the way it faces, past the headers.
+    walls: { spread: 0.5, follow: 'framing', join: [0.05, 0.05, 0.05] },
     deck: { spread: 0.8, slide: true }, // last, so it slides clear of everything else
   },
   EXPLODE_GAP = 0.7,
   MAX_SPREAD = 2,
-  MAX_LIFT = 2;
+  MAX_LIFT = 2,
+  MAX_PULL = 2;
 // mesh -> { center, move, spread and stretch: per axis, final: exploded box }
 const assembly = new Map();
 {
@@ -402,15 +406,20 @@ const assembly = new Map();
       let s = spread,
         final = layout(list, c, s, slide, move, plan);
       // follow: take the transform of the containing wall-framing group of the same storey (so a
-      // header stays lined up with its opening), then pull straight out of the wall (its thin
-      // horizontal axis, away from the house) until it clears by EXPLODE_GAP.
+      // header or a wall's sheathing stays lined up with its opening), then pull straight out of
+      // the wall (userData.normal, or its thin horizontal axis away from the house) until it
+      // clears everything behind it by EXPLODE_GAP.
       const host =
         follow &&
         groups.find(
           (g) =>
             g.id === follow &&
             g.storey === (list[0].userData.storey ?? 0) &&
-            g.bounds.containsPoint(c),
+            // In plan, a little wider than the wall lines: sheathing and gables sit just outside.
+            c.x > g.bounds.min.x - 0.3 &&
+            c.x < g.bounds.max.x + 0.3 &&
+            c.z > g.bounds.min.z - 0.3 &&
+            c.z < g.bounds.max.z + 0.3,
         );
       if (host) {
         s = host.s;
@@ -420,21 +429,45 @@ const assembly = new Map();
         for (const b of final) box.union(b);
         const size = box.getSize(new THREE.Vector3()),
           mid = box.getCenter(new THREE.Vector3()),
-          ax = size.x <= size.z ? 0 : 2,
-          side = 2 - ax,
-          sign = Math.sign(ax ? mid.z - houseCenter.z : mid.x - houseCenter.x) || 1;
-        let t = 0;
-        for (const o of [...others, ...placed]) {
-          if (o.max.y < box.min.y - 0.005 || o.min.y > box.max.y + 0.005) continue;
-          if (o.max.getComponent(side) <= box.min.getComponent(side)) continue;
-          if (o.min.getComponent(side) >= box.max.getComponent(side)) continue;
-          const need =
-            sign > 0
-              ? o.max.getComponent(ax) - box.min.getComponent(ax)
-              : box.max.getComponent(ax) - o.min.getComponent(ax);
-          if (need > 0 && need < size.getComponent(ax) + 1) t = Math.max(t, need);
+          normal = list[0].userData.normal, // the way sheathing faces
+          away = (k) => Math.sign(k ? mid.z - houseCenter.z : mid.x - houseCenter.x) || 1,
+          thin = normal ? (normal[0] ? 0 : 2) : size.x <= size.z ? 0 : 2;
+        // Distance to step along axis k (direction sign) until nothing touches it or sits within
+        // EXPLODE_GAP behind it.
+        const pull = (k, sign) => {
+          let t = 0;
+          for (let pass = 0; pass < 40; pass++) {
+            const probe = box.clone().translate(v.set(0, 0, 0).setComponent(k, sign * t));
+            if (sign > 0) probe.min.setComponent(k, probe.min.getComponent(k) - EXPLODE_GAP);
+            else probe.max.setComponent(k, probe.max.getComponent(k) + EXPLODE_GAP);
+            probe.expandByScalar(0.002);
+            let next = t;
+            for (const o of [...others, ...placed])
+              if (o.intersectsBox(probe))
+                next = Math.max(
+                  next,
+                  EXPLODE_GAP +
+                    (sign > 0
+                      ? o.max.getComponent(k) - box.min.getComponent(k)
+                      : box.max.getComponent(k) - o.min.getComponent(k)),
+                );
+            if (next === t) break;
+            t = next;
+          }
+          return t;
+        };
+        // Out of the wall (the way it faces). If that runs into the house for more than MAX_PULL
+        // (the recess return walls face into the porch), slide along the wall away from the house
+        // instead, by at least EXPLODE_GAP.
+        let ax = thin,
+          sign = normal ? normal[thin] : away(thin),
+          t = pull(ax, sign);
+        if (t > MAX_PULL) {
+          ax = 2 - thin;
+          sign = away(ax);
+          t = Math.max(EXPLODE_GAP, pull(ax, sign));
         }
-        v.set(0, 0, 0).setComponent(ax, sign * (t + EXPLODE_GAP));
+        v.set(0, 0, 0).setComponent(ax, sign * t);
         move.add(v);
         for (const b of final) b.translate(v);
         list.forEach((m, i) =>
