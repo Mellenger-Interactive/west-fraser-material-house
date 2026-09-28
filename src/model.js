@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import stampUrl from './lvl-stamp.png';
 export const products = [
   {
     id: 'plates',
@@ -119,6 +120,32 @@ function texture(kind) {
   t.colorSpace = THREE.SRGBColorSpace;
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.anisotropy = 4;
+  return t;
+}
+// LVL mill stamp (round 5), printed on LVL's two broad faces as on West Fraser's product photos.
+// One tile is STAMP_TILE metres long and the full 0.24 m face high (1024 px per metre): wood
+// grain, then the stamp art (src/lvl-stamp.png) once near its start. Drawn larger than a real
+// stamp (about 35% of the face height) so it reads from the default camera.
+const STAMP_TILE = 1.5;
+function stampTexture(woodCanvas) {
+  const c = document.createElement('canvas');
+  c.width = 1536;
+  c.height = 246;
+  const ctx = c.getContext('2d');
+  for (let x = 0; x < c.width; x += 512) ctx.drawImage(woodCanvas, x, 0, 512, c.height);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = THREE.RepeatWrapping;
+  t.anisotropy = 8;
+  const img = new Image();
+  img.onload = () => {
+    const h = c.height * 0.60;
+    ctx.globalAlpha = 0.5;
+    ctx.drawImage(img, 150, c.height * 0.12, (h * img.width) / img.height, h);
+    ctx.globalAlpha = 1;
+    t.needsUpdate = true;
+  };
+  img.src = stampUrl;
   return t;
 }
 // Lap siding: 8 courses per 1.28 m tile (0.16 m exposure), pale so the material colour tints it.
@@ -245,6 +272,26 @@ export function createHouse() {
     });
     mats[`${id}Edge`].userData.product = id;
   }
+  // LVL: the broad faces take the stamped material (tagged with its product, like the OSB edges);
+  // lvlGeo() scales their UVs by length so the stamp keeps its size and repeats every STAMP_TILE.
+  mats.lvlStamp = mats.lvl.clone();
+  mats.lvlStamp.map = stampTexture(wood.image);
+  mats.lvlStamp.userData.product = 'lvl';
+  const lvlGeos = new Map();
+  function lvlGeo(w, d) {
+    const along = w >= d ? 'x' : 'z',
+      len = Math.max(w, d),
+      key = `${along}${len.toFixed(3)}`;
+    if (!lvlGeos.has(key)) {
+      // BoxGeometry faces are +x, -x, +y, -y, +z, -z, 4 vertices and one group each.
+      const g = new THREE.BoxGeometry(1, 1, 1),
+        uv = g.attributes.uv;
+      for (const f of along === 'x' ? [4, 5] : [0, 1])
+        for (let i = f * 4; i < f * 4 + 4; i++) uv.setX(i, (uv.getX(i) * len) / STAMP_TILE);
+      lvlGeos.set(key, { geo: g, broad: along === 'x' ? [4, 5] : [0, 1] });
+    }
+    return lvlGeos.get(key);
+  }
   const boxGeo = new THREE.BoxGeometry(1, 1, 1);
   // Unit boxes regrouped as [2 broad faces, 4 edges], one per thin axis (x, y, z). BoxGeometry
   // builds its faces in +x, -x, +y, -y, +z, -z order, 6 indices each.
@@ -264,9 +311,14 @@ export function createHouse() {
     // its caps (0) and sides (1), so it takes the same [face, edge] materials.
     const osb = OSB.includes(id),
       thin = [w, h, d].indexOf(Math.min(w, h, d));
+    const lvl = id === 'lvl' && !geo ? lvlGeo(w, d) : null;
     const mesh = new THREE.Mesh(
-      geo ?? (osb ? panelGeos[thin] : boxGeo),
-      osb ? [mats[id], mats[`${id}Edge`]] : mats[id],
+      geo ?? (osb ? panelGeos[thin] : (lvl?.geo ?? boxGeo)),
+      osb
+        ? [mats[id], mats[`${id}Edge`]]
+        : lvl
+          ? [0, 1, 2, 3, 4, 5].map((f) => (lvl.broad.includes(f) ? mats.lvlStamp : mats.lvl))
+          : mats[id],
     );
     mesh.scale.set(w, h, d);
     mesh.position.set(x, y, z);

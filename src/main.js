@@ -749,4 +749,7 @@ window.houseExplorer = {
   products: products.length,
   getState: () => ({ progress, playing, exploded, cutaway, selected, selection: [...selection] }),
   exportModel,
+  scene,
+  camera,
+  controls, // TEMP-STAMP-DEBUG
 };
