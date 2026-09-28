@@ -247,6 +247,7 @@ function looseOffset(id, p, out) {
 // - in place (everything else): no stretch or slide. If any part would still overlap another
 //   exploded part, the whole assembly spreads further (up to MAX_SPREAD), or else lifts (up to
 //   MAX_LIFT), until it clears, so its pieces never separate from each other.
+// - follow (lvl headers): see `host` below.
 // Products are placed in SPREAD order. In-place assemblies clear the final boxes of the
 // assemblies placed before them only, so each product converted later must clear the ones
 // already done; a slide (last) also clears the loose positions of products not yet in SPREAD.
@@ -257,6 +258,9 @@ const SPREAD = {
     // Wall framing per storey, I-joist top and bottom flanges per floor, porch roof framing.
     framing: { spread: 0.5, plan: true, join: [0.5, 0.01, 0.5] },
     floor: { spread: 0.5, join: [0.05, 0.01, 0.05] }, // one assembly per floor (panels are gapped)
+    // Window and door headers follow their wall's framing and pull out of the wall; the porch beam
+    // (tagged in model.js) hangs below the porch rafters.
+    lvl: { spread: 0.5, follow: 'framing' },
     deck: { spread: 0.8, slide: true }, // last, so it slides clear of everything else
   },
   EXPLODE_GAP = 0.7,
@@ -302,9 +306,11 @@ const assembly = new Map();
   // share its userData.assembly name and storey, if any.
   const sameTags = (a, b) =>
     ['above', 'below', 'assembly', 'storey'].every((k) => a.userData[k] === b.userData[k]);
+  // Placed untagged in-place assemblies ({ id, storey, bounds, c, s, plan, move }), for `follow`.
+  const groups = [];
   for (const [
     id,
-    { spread, slide = false, plan = false, join = [0.01, 0.01, 0.01] },
+    { spread, slide = false, plan = false, follow, join = [0.01, 0.01, 0.01] },
   ] of Object.entries(SPREAD)) {
     const group = parts.filter((m) => m.userData.product === id);
     const boxes = group.map((m) => {
@@ -362,6 +368,54 @@ const assembly = new Map();
         move = new THREE.Vector3(0, lift, 0);
       let s = spread,
         final = layout(list, c, s, slide, move, plan);
+      // follow: take the transform of the containing wall-framing group of the same storey (so a
+      // header stays lined up with its opening), then pull straight out of the wall (its thin
+      // horizontal axis, away from the house) until it clears by EXPLODE_GAP.
+      const host =
+        follow &&
+        groups.find(
+          (g) =>
+            g.id === follow &&
+            g.storey === (list[0].userData.storey ?? 0) &&
+            g.bounds.containsPoint(c),
+        );
+      if (host) {
+        s = host.s;
+        move.copy(host.move);
+        final = layout(list, host.c, s, false, move, host.plan);
+        const box = new THREE.Box3();
+        for (const b of final) box.union(b);
+        const size = box.getSize(new THREE.Vector3()),
+          mid = box.getCenter(new THREE.Vector3()),
+          ax = size.x <= size.z ? 0 : 2,
+          side = 2 - ax,
+          sign = Math.sign(ax ? mid.z - houseCenter.z : mid.x - houseCenter.x) || 1;
+        let t = 0;
+        for (const o of [...others, ...placed]) {
+          if (o.max.y < box.min.y - 0.005 || o.min.y > box.max.y + 0.005) continue;
+          if (o.max.getComponent(side) <= box.min.getComponent(side)) continue;
+          if (o.min.getComponent(side) >= box.max.getComponent(side)) continue;
+          const need =
+            sign > 0
+              ? o.max.getComponent(ax) - box.min.getComponent(ax)
+              : box.max.getComponent(ax) - o.min.getComponent(ax);
+          if (need > 0 && need < size.getComponent(ax) + 1) t = Math.max(t, need);
+        }
+        v.set(0, 0, 0).setComponent(ax, sign * (t + EXPLODE_GAP));
+        move.add(v);
+        for (const b of final) b.translate(v);
+        list.forEach((m, i) =>
+          assembly.set(m, {
+            center: host.c.toArray(),
+            move,
+            spread: [s, host.plan ? 0 : s, s],
+            stretch: [0, 0, 0],
+            final: final[i],
+          }),
+        );
+        placed.push(...final);
+        continue;
+      }
       if (slide) {
         const box = new THREE.Box3();
         for (const b of final) box.union(b);
@@ -406,6 +460,8 @@ const assembly = new Map();
         }
       }
       placed.push(...final);
+      if (!slide && !above && !list[0].userData.assembly)
+        groups.push({ id, storey: list[0].userData.storey ?? 0, bounds, c, s, plan, move });
       list.forEach((m, i) =>
         assembly.set(m, {
           center: c.toArray(),

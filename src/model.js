@@ -869,7 +869,8 @@ export function createHouse() {
     box('deck', x, postY, 4.9, 0.13, postH, 0.13);
     box('trim', x, postY, 4.9, 0.15, postH, 0.15);
   }
-  box('lvl', 0.1, beamTop - 0.12, 4.9, 3.3, 0.24, 0.14);
+  // LVL beam on the posts, under the rafters: exploded, it hangs below the porch roof framing.
+  box('lvl', 0.1, beamTop - 0.12, 4.9, 3.3, 0.24, 0.14, { above: 'base', below: 'framing' });
   const porchRoof = { assembly: 'porch-roof' }; // explodes apart from the wall framing
   box('framing', 0.1, 3.58, 2.775, 3.3, 0.24, 0.075, porchRoof); // ledger on the 2nd-floor rim
   const c = Math.cos(Math.atan(slope)),
